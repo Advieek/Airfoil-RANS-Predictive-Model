@@ -115,7 +115,7 @@ def run_real(args):
         SimPointCloudDataset,
         collate_single,
         compute_norm_stats,
-        load_scarce,
+        load_scarce_cached,
         save_norm_stats,
         split_train_val,
         unnormalize_y,
@@ -126,7 +126,7 @@ def run_real(args):
     np.random.seed(args.seed)
 
     t0 = time.time()
-    data_list, name_list = load_scarce(root=args.data_root, train=True)
+    data_list, name_list = load_scarce_cached(root=args.data_root, train=True)
     print(f"loaded {len(data_list)} sims in {time.time() - t0:.1f}s; shape[0]={data_list[0].shape}")
 
     (train_data, train_names), (val_data, val_names) = split_train_val(
