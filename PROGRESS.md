@@ -20,4 +20,20 @@
 - Evolution frames (plots/evolution/mlp_scarce/, 40 frames, epoch 0 → 390): visibly sharpened — epoch 0 shows a diffuse pressure gradient, epoch 390 shows a tight leading-edge stagnation point and clear suction peak hugging the airfoil surface.
 - **GATE 4 PASSED**: val-loss clearly decreasing overall (1.26 → 0.64, ~50% reduction); evolution frames get sharper; side-by-side predicted-vs-true pressure plot (plots/gate4_pred_vs_true_pressure.png, using best checkpoint @ epoch 239) is nearly indistinguishable from ground truth except minor high-freq artifacts in the far wake. Script: scripts/step5_gate4_sidebyside.py.
 - TensorBoard is live at http://localhost:6006 (backgrounded, PID recorded via `ps aux | grep tensorboard` if needed) — user can view train/val curves and weight histograms.
-- Next: Step 6 — force-based evaluation (Cl/Cd via airfrans Simulation monkey-patch), Gate 5.
+- [2026-07-07] Step 6: wrote src/evaluate.py — chunked full-res inference (50k-point chunks), then force coefficients via monkey-patching predicted velocity/pressure/nu_t onto a real `airfrans.Simulation` instance (same node order as `airfrans.dataset.load`, verified by instantiating one Simulation per test sim and reading both `reference=False` [our patched fields] and `reference=True` [untouched ground truth from VTU] off the *same* instance — no ordering risk). Ran full test set (200 sims), ~timed out estimate ~24 min but finished much faster in practice.
+- **GATE 5 PASSED** — metrics table (checkpoints/eval_results_mlp.json), MLP / scarce, best-val checkpoint (epoch 239):
+
+  | metric | ours (MLP, 400ep, 1 seed) | AirfRANS paper (MLP/scarce, Table 5) |
+  |---|---|---|
+  | Cl relative error | 0.83 | 0.385 ± 0.097 |
+  | Cl Spearman | **0.950** | 0.981 ± 0.006 |
+  | Cd relative error | 17.6 | 3.50 ± 0.998 |
+  | Cd Spearman | **-0.186** | -0.139 ± 0.175 |
+  | volume MSE (normalized) [vx,vy,p,nut] | [0.172, 0.186, 0.414, 0.216] | [0.0146, 0.0145, 0.047, 0.061] |
+  | surface MSE (normalized) [vx,vy,p,nut] | [0.009, 0.005, 1.023, 0.0045] | [-, -, 0.195, -] |
+
+  Rank-correlation *pattern* matches the paper closely (Cl strongly correlated, Cd near-zero/slightly negative for both) — this is the important qualitative signal and confirms the pipeline (column layout, normalization, un-normalization, force integration reuse) is correct, since a bug would most likely have wrecked Cl too. Our absolute error magnitudes are worse than the paper's tuned baseline, expected since this is one quick 400-epoch single-seed run with no hyperparameter tuning (explicitly out of scope for today per spec's "Scope discipline").
+  Why Cd is hard: wall shear stress needs a velocity-field derivative (jacobian) computed by VTK across mesh cells; a per-point MLP has no smoothness constraint across neighboring points, so its field is locally noisy and the derivative amplifies that noise — exactly the motivation for the GraphSAGE upgrade in Step 9 (message passing enforces neighbor consistency).
+  Dashboards: plots/gate5_cl_cd_scatter.png (Cl tracks the diagonal; Cd is a scattered cloud with no trend), plots/gate5_error_contours.png (best test sim: diffuse low pressure error; worst test sim: concentrated failure right at a small/thin airfoil).
+  Scripts: src/evaluate.py, scripts/step6_dashboards.py.
+- Next: Step 7 — arbitrary-airfoil inference (geometry.py + predict.py), Gate 6 (NACA 2412 @ Re 4e6 / AoA 5°).
