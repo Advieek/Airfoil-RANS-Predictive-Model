@@ -6,7 +6,7 @@ import numpy as np
 from src.evaluate import chunked_predict, load_model_from_checkpoint
 from src.geometry import apply_inflow, generate_geometry_cloud, integrate_forces, naca_airfoil, resample_close
 
-CHECKPOINT = "checkpoints/mlp_scarce_best.pt"
+CHECKPOINT = "checkpoints/graphsage_scarce_best.pt"
 
 
 def parse_dat_bytes(data_bytes):

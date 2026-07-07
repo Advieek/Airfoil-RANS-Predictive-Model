@@ -56,6 +56,24 @@
 - Wrote README.md (setup, usage, results table, known limitations, morning-after instructions).
 - **GATE 8**: smoke losses logged ✓; long run launched (verified alive via `ps aux`, PID recorded in this log) ✓; PROGRESS.md ends with exact morning-after instructions ✓ (see below). Final commit follows this entry.
 
+## 2026-07-07, evening — GraphSAGE run finished, morning_after.sh executed
+
+- [2026-07-07 20:39] GraphSAGE overnight run (launched ~18:06) finished all 400 epochs at ~20:36 (~2h30m wall clock, close to the ~2.4h estimate). **Best val loss 0.5692 at the checkpointed epoch, vs the MLP's 0.6367** — GraphSAGE beats the MLP on validation loss, as Gate 8/the spec anticipated. Final-epoch (399) numbers: train_loss 0.086, val_loss 0.603 (mild late plateau/overfit, same pattern as the MLP run).
+- Ran `./morning_after.sh` — re-evaluated on the full 200-sim test set, regenerated the evolution GIF, repointed `src/app_core.py` and `predict.py`'s default checkpoint to `checkpoints/graphsage_scarce_best.pt`.
+
+  | metric | MLP (Gate 5) | GraphSAGE | change |
+  |---|---|---|---|
+  | Cl relative error | 0.830 | **0.427** | nearly halved |
+  | Cl Spearman | 0.950 | **0.967** | improved |
+  | Cd relative error | 17.62 | 20.05 | slightly worse |
+  | Cd Spearman | **-0.186** | **+0.123** | flipped from no-skill-negative to weak-positive |
+  | volume MSE (raw) [vx,vy,p,nut] | [135.6, 149.5, 2323081, 1.5e-6] | [147.2, 128.5, 1962412, 1.8e-6] | mixed (pressure MSE down ~15%, vx MSE up slightly) |
+
+  Interpretation: this is the expected direction of improvement from the spec's own reasoning — message passing gives each point information about its neighbors, which is exactly what a per-point MLP lacks for resolving the near-wall velocity gradients that drag depends on. Cd Spearman going from clearly-negative to clearly-positive (even though still weak, 0.123) is the most meaningful signal here: the model went from "actively anti-correlated with true drag ranking" to "weakly but genuinely tracking it." Cl, which was already the MLP's strength, improved further. Cd relative error (the raw magnitude metric) didn't improve — consistent with Cd remaining hard in absolute terms even as its *ranking* got better; this pattern (rank correlation improving before absolute error does) is normal for a small, still-undertuned model on a genuinely hard sub-problem.
+  Results file: checkpoints/eval_results_graphsage.json. Evolution GIF: plots/training_evolution_graphsage.gif (40 frames, same visible noise-to-structure sharpening as the MLP's).
+- `app.py` / `predict.py` now default to `checkpoints/graphsage_scarce_best.pt`. Restarted the Streamlit process (old one had the MLP cached via `@st.cache_resource`) — confirmed serving again at http://localhost:8501 (HTTP 200) with the new checkpoint.
+- This closes out Step 9 / Gate 8's overnight-run follow-through. Remaining open items are exactly the "Next steps" list already recorded above (full task, hyperparameter tuning, ensembles, extrapolation tasks, PointNet/Graph U-Net, activation view) — none in scope for today per BUILD_SPEC's scope discipline.
+
 ## Morning-after instructions (exact)
 
 1. Check the run finished: `tail -5 runs/graphsage_scarce/losses.csv` should show epoch 399. If `pgrep -f "src.train --mode real --model graphsage"` still returns a PID, it's not done yet — wait.
