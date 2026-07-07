@@ -1,0 +1,9 @@
+data/
+checkpoints/
+runs/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+*.zip
+plots/evolution/*.png
