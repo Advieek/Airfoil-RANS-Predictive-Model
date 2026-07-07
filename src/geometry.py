@@ -102,20 +102,13 @@ def surface_normals(coords):
     return np.vstack([normals, normals[0]])
 
 
-def generate_point_cloud(
-    surface_coords, reynolds, aoa_deg, n_volume=20000, domain=((-2, 4), (-1.5, 1.5)), seed=0, T=AIR_T
-):
-    """surface_coords: (M+1, 2) closed loop, chord-normalized to [0, 1] in x.
-    Returns per-point input features [pos(2), inlet_v(2), sdf(1), normals(2)]
-    matching the training column layout, plus bookkeeping fields."""
+def generate_geometry_cloud(surface_coords, n_volume=20000, domain=((-2, 4), (-1.5, 1.5)), seed=0):
+    """Airfoil-shape-dependent part of the point cloud (position, sdf, normals) --
+    independent of Re/AoA, so this is what Streamlit should cache per-airfoil.
+    surface_coords: (M+1, 2) closed loop, chord-normalized to [0, 1] in x."""
     rng = np.random.default_rng(seed)
     poly = Polygon(surface_coords)
     boundary = poly.exterior
-
-    nu = air_kinematic_viscosity(T)
-    inlet_speed = reynolds * nu  # chord = 1
-    aoa_rad = np.deg2rad(aoa_deg)
-    inlet_vx, inlet_vy = inlet_speed * np.cos(aoa_rad), inlet_speed * np.sin(aoa_rad)
 
     surf_pts = surface_coords[:-1]
     surf_norm = surface_normals(surface_coords)[:-1]
@@ -150,20 +143,50 @@ def generate_point_cloud(
     all_normals = np.vstack([surf_norm, np.zeros((len(cand), 2))])
     is_surface = np.concatenate([np.ones(n_surf, dtype=bool), np.zeros(len(cand), dtype=bool)])
 
-    n_total = len(all_pos)
-    inlet_velocity = np.tile([inlet_vx, inlet_vy], (n_total, 1))
-    x = np.concatenate([all_pos, inlet_velocity, all_sdf[:, None], all_normals], axis=1).astype(np.float32)
+    return {
+        "position": all_pos.astype(np.float32),
+        "sdf": all_sdf.astype(np.float32),
+        "normals": all_normals.astype(np.float32),
+        "is_surface": is_surface,
+        "surface_normals": all_normals[is_surface],
+    }
+
+
+def apply_inflow(geo_cloud, reynolds, aoa_deg, T=AIR_T):
+    """Cheap step: inject Re/AoA-dependent inlet velocity into a cached geometry
+    cloud. This is the only per-slider-move recomputation Streamlit needs --
+    position/sdf/normals (the expensive shapely-based part) stay cached."""
+    nu = air_kinematic_viscosity(T)
+    inlet_speed = reynolds * nu  # chord = 1
+    aoa_rad = np.deg2rad(aoa_deg)
+    inlet_vx, inlet_vy = inlet_speed * np.cos(aoa_rad), inlet_speed * np.sin(aoa_rad)
+
+    n_total = geo_cloud["position"].shape[0]
+    inlet_velocity = np.tile([inlet_vx, inlet_vy], (n_total, 1)).astype(np.float32)
+    x = np.concatenate(
+        [geo_cloud["position"], inlet_velocity, geo_cloud["sdf"][:, None], geo_cloud["normals"]], axis=1
+    ).astype(np.float32)
 
     return {
         "x": x,
-        "position": all_pos.astype(np.float32),
-        "is_surface": is_surface,
-        "surface_normals": all_normals[is_surface],
+        "position": geo_cloud["position"],
+        "is_surface": geo_cloud["is_surface"],
+        "surface_normals": geo_cloud["surface_normals"],
         "inlet_speed": float(inlet_speed),
         "aoa_rad": float(aoa_rad),
         "reynolds": float(reynolds),
         "aoa_deg": float(aoa_deg),
     }
+
+
+def generate_point_cloud(
+    surface_coords, reynolds, aoa_deg, n_volume=20000, domain=((-2, 4), (-1.5, 1.5)), seed=0, T=AIR_T
+):
+    """Convenience wrapper combining generate_geometry_cloud + apply_inflow in
+    one call (used by predict.py, which doesn't need the two-stage caching that
+    the Streamlit app relies on for sub-second slider updates)."""
+    geo = generate_geometry_cloud(surface_coords, n_volume=n_volume, domain=domain, seed=seed)
+    return apply_inflow(geo, reynolds, aoa_deg, T=T)
 
 
 def integrate_forces(surface_pos, surface_normal_vecs, pred_surface, offset_pred, eps, inlet_speed, aoa_rad, T=AIR_T):

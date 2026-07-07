@@ -43,6 +43,8 @@ netron==9.1.4
 networkx==3.6.1
 numpy==2.4.6
 onnx==1.22.0
+onnx-ir==0.2.1
+onnxscript==0.7.1
 packaging==26.2
 pandas==3.0.3
 pillow==12.3.0
