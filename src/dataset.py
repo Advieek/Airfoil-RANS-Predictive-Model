@@ -1,5 +1,10 @@
 """AirfRANS loading, train-only normalization, float32 casting, per-epoch subsampling.
 
+Cache note: airfrans.dataset.load() re-parses ~200 VTU/VTP files from disk every call
+(~24s for the scarce split on this machine). load_scarce_cached() memoizes the float32
+arrays to data/cache/*.pt via torch.save so repeated runs (training, eval, notebooks)
+don't pay that cost each time.
+
 Column layout of the (N, 12) arrays returned by airfrans.dataset.load (verified against
 the installed package source, site-packages/airfrans/dataset.py):
   [0:2]  position (x, y)
@@ -12,6 +17,7 @@ the installed package source, site-packages/airfrans/dataset.py):
   [11:12] surface boolean
 """
 import json
+import os
 
 import numpy as np
 import torch
@@ -27,6 +33,18 @@ def load_scarce(root="data/Dataset", train=True):
 
     data_list, name_list = af.dataset.load(root=root, task="scarce", train=train)
     data_list = [d.astype(np.float32) for d in data_list]
+    return data_list, name_list
+
+
+def load_scarce_cached(root="data/Dataset", train=True, cache_dir="data/cache"):
+    os.makedirs(cache_dir, exist_ok=True)
+    split = "train" if train else "test"
+    cache_path = os.path.join(cache_dir, f"scarce_{split}.pt")
+    if os.path.exists(cache_path):
+        obj = torch.load(cache_path, weights_only=False)
+        return obj["data"], obj["names"]
+    data_list, name_list = load_scarce(root=root, train=train)
+    torch.save({"data": data_list, "names": name_list}, cache_path)
     return data_list, name_list
 
 
