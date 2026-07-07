@@ -110,12 +110,38 @@ def run_synthetic(args):
     return losses
 
 
+def collate_list(batch):
+    """Multi-sim batching: keep each sim's variable-length point cloud
+    separate (no padding/stacking) -- the training loop concatenates them
+    (and, for GraphSAGE, builds a block-diagonal k-NN graph) after the .to(device)
+    transfer."""
+    return batch
+
+
+def assemble_batch(model, batch_list, device):
+    """Concatenate a multi-sim batch into one big point set for a single
+    forward/backward pass. For GraphSAGE this builds one block-diagonal graph
+    (each sim's own k-NN graph, no cross-sim edges) via build_batched_graph."""
+    xs = [b["x"].to(device) for b in batch_list]
+    ys = [b["y"].to(device) for b in batch_list]
+    x_cat = torch.cat(xs, dim=0)
+    y_cat = torch.cat(ys, dim=0)
+    if hasattr(model, "build_graph"):
+        from src.models import build_batched_graph
+
+        edge_index = build_batched_graph(model, [x[:, :2] for x in xs])
+        pred = model(x_cat, edge_index)
+    else:
+        pred = model(x_cat)
+    return pred, y_cat
+
+
 def run_real(args):
     from src.dataset import (
         SimPointCloudDataset,
         collate_single,
         compute_norm_stats,
-        load_scarce_cached,
+        load_airfrans_cached,
         save_norm_stats,
         split_train_val,
         unnormalize_y,
@@ -126,25 +152,41 @@ def run_real(args):
     np.random.seed(args.seed)
 
     t0 = time.time()
-    data_list, name_list = load_scarce_cached(root=args.data_root, train=True)
-    print(f"loaded {len(data_list)} sims in {time.time() - t0:.1f}s; shape[0]={data_list[0].shape}")
+    data_list, name_list = load_airfrans_cached(root=args.data_root, task=args.task, train=True)
+    print(f"loaded {len(data_list)} '{args.task}' sims in {time.time() - t0:.1f}s; shape[0]={data_list[0].shape}")
 
-    (train_data, train_names), (val_data, val_names) = split_train_val(
-        data_list, name_list, n_val=args.n_val, seed=args.seed
-    )
+    n_val = args.n_val if args.n_val is not None else max(1, round(0.1 * len(data_list)))
+    (train_data, train_names), (val_data, val_names) = split_train_val(data_list, name_list, n_val=n_val, seed=args.seed)
     print(f"train sims: {len(train_data)}, val sims: {len(val_data)}")
 
     stats = compute_norm_stats(train_data)
     os.makedirs("checkpoints", exist_ok=True)
     save_norm_stats(stats, "checkpoints/norm_stats.json")
 
-    train_ds = SimPointCloudDataset(train_data, train_names, stats, n_points=args.n_points, subsample=True)
-    val_ds = SimPointCloudDataset(val_data, val_names, stats, n_points=args.n_points, subsample=True)
+    subsample = not args.full_resolution
+    n_points = args.n_points
+    train_ds = SimPointCloudDataset(train_data, train_names, stats, n_points=n_points, subsample=subsample)
+    val_ds = SimPointCloudDataset(val_data, val_names, stats, n_points=n_points, subsample=subsample)
 
-    train_loader = DataLoader(train_ds, batch_size=1, shuffle=True, collate_fn=collate_single)
-    val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, collate_fn=collate_single)
+    sims_per_batch = args.sims_per_batch
+    train_loader = DataLoader(train_ds, batch_size=sims_per_batch, shuffle=True, collate_fn=collate_list)
+    val_loader = DataLoader(val_ds, batch_size=sims_per_batch, shuffle=False, collate_fn=collate_list)
 
-    model = build_model(args.model, in_dim=7, out_dim=4).to(device)
+    if args.model == "mlp":
+        hidden = tuple(int(h) for h in args.hidden.split(","))
+        model_kwargs = {"in_dim": 7, "out_dim": 4, "hidden": hidden}
+    else:
+        model_kwargs = {
+            "in_dim": 7,
+            "out_dim": 4,
+            "hidden": args.gnn_hidden,
+            "n_layers": args.gnn_layers,
+            "k": args.gnn_k,
+            "knn_backend": args.gnn_knn_backend,
+        }
+    model = build_model(args.model, **model_kwargs).to(device)
+    n_params = sum(p.numel() for p in model.parameters())
+    print(f"model={args.model} params={n_params:,} kwargs={model_kwargs}")
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs)
 
@@ -173,33 +215,27 @@ def run_real(args):
     for epoch in range(args.epochs):
         train_ds.set_epoch(epoch)
         model.train()
-        train_loss_sum, n_sims = 0.0, 0
-        for batch in train_loader:
-            x = batch["x"].to(device)
-            y = batch["y"].to(device)
-            edge_index = model.build_graph(x[:, :2]) if hasattr(model, "build_graph") else None
-            pred = model(x, edge_index) if edge_index is not None else model(x)
-            loss = torch.nn.functional.mse_loss(pred, y)
+        train_loss_sum, n_steps = 0.0, 0
+        for batch_list in train_loader:
+            pred, y_cat = assemble_batch(model, batch_list, device)
+            loss = torch.nn.functional.mse_loss(pred, y_cat)
             opt.zero_grad()
             loss.backward()
             opt.step()
             train_loss_sum += loss.item()
-            n_sims += 1
+            n_steps += 1
         sched.step()
-        train_loss = train_loss_sum / n_sims
+        train_loss = train_loss_sum / n_steps
 
         model.eval()
-        val_loss_sum, n_val_sims = 0.0, 0
+        val_loss_sum, n_val_steps = 0.0, 0
         with torch.no_grad():
-            for batch in val_loader:
-                x = batch["x"].to(device)
-                y = batch["y"].to(device)
-                edge_index = model.build_graph(x[:, :2]) if hasattr(model, "build_graph") else None
-                pred = model(x, edge_index) if edge_index is not None else model(x)
-                loss = torch.nn.functional.mse_loss(pred, y)
+            for batch_list in val_loader:
+                pred, y_cat = assemble_batch(model, batch_list, device)
+                loss = torch.nn.functional.mse_loss(pred, y_cat)
                 val_loss_sum += loss.item()
-                n_val_sims += 1
-        val_loss = val_loss_sum / n_val_sims
+                n_val_steps += 1
+        val_loss = val_loss_sum / n_val_steps
 
         writer.add_scalar("loss/train", train_loss, epoch)
         writer.add_scalar("loss/val", val_loss, epoch)
@@ -215,6 +251,7 @@ def run_real(args):
                 {
                     "model_state": model.state_dict(),
                     "model_name": args.model,
+                    "model_kwargs": model_kwargs,
                     "norm_stats_path": "checkpoints/norm_stats.json",
                     "epoch": epoch,
                     "val_loss": val_loss,
@@ -248,10 +285,18 @@ def get_args():
     p = argparse.ArgumentParser()
     p.add_argument("--mode", choices=["synthetic", "real"], default="real")
     p.add_argument("--model", choices=["mlp", "graphsage"], default="mlp")
+    p.add_argument("--task", choices=["scarce", "full"], default="full")
     p.add_argument("--epochs", type=int, default=400)
     p.add_argument("--lr", type=float, default=1e-3)
-    p.add_argument("--n-points", type=int, default=32000)
-    p.add_argument("--n-val", type=int, default=20)
+    p.add_argument("--n-points", type=int, default=32000, help="ignored if --full-resolution is set")
+    p.add_argument("--full-resolution", action="store_true", help="use every point per sim, no subsampling")
+    p.add_argument("--sims-per-batch", type=int, default=4)
+    p.add_argument("--hidden", default="256,256,256,256,256", help="comma-separated MLP hidden layer widths")
+    p.add_argument("--gnn-hidden", type=int, default=256)
+    p.add_argument("--gnn-layers", type=int, default=6)
+    p.add_argument("--gnn-k", type=int, default=16)
+    p.add_argument("--gnn-knn-backend", choices=["mps_chunked", "cpu_kdtree"], default="mps_chunked")
+    p.add_argument("--n-val", type=int, default=None, help="default: 10%% of train sims")
     p.add_argument("--data-root", default="data/Dataset")
     p.add_argument("--run-name", default="mlp_scarce")
     p.add_argument("--evolution-every", type=int, default=10)

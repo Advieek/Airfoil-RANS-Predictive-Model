@@ -45,7 +45,8 @@ def chunked_predict(model, x_raw, stats, device, chunk=50_000):
 
 def load_model_from_checkpoint(ckpt_path, device="cpu"):
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
-    model = build_model(ckpt["model_name"], in_dim=7, out_dim=4).to(device)
+    model_kwargs = ckpt.get("model_kwargs", {"in_dim": 7, "out_dim": 4})
+    model = build_model(ckpt["model_name"], **model_kwargs).to(device)
     model.load_state_dict(ckpt["model_state"])
     model.eval()
     stats = load_norm_stats(ckpt["norm_stats_path"])

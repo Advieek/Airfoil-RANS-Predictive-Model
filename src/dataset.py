@@ -28,24 +28,32 @@ TARGET_COLS = slice(7, 11)
 SURFACE_COL = 11
 
 
-def load_scarce(root="data/Dataset", train=True):
+def load_airfrans(root="data/Dataset", task="scarce", train=True):
     import airfrans as af
 
-    data_list, name_list = af.dataset.load(root=root, task="scarce", train=train)
+    data_list, name_list = af.dataset.load(root=root, task=task, train=train)
     data_list = [d.astype(np.float32) for d in data_list]
     return data_list, name_list
 
 
-def load_scarce_cached(root="data/Dataset", train=True, cache_dir="data/cache"):
+def load_airfrans_cached(root="data/Dataset", task="scarce", train=True, cache_dir="data/cache"):
     os.makedirs(cache_dir, exist_ok=True)
     split = "train" if train else "test"
-    cache_path = os.path.join(cache_dir, f"scarce_{split}.pt")
+    cache_path = os.path.join(cache_dir, f"{task}_{split}.pt")
     if os.path.exists(cache_path):
         obj = torch.load(cache_path, weights_only=False)
         return obj["data"], obj["names"]
-    data_list, name_list = load_scarce(root=root, train=train)
+    data_list, name_list = load_airfrans(root=root, task=task, train=train)
     torch.save({"data": data_list, "names": name_list}, cache_path)
     return data_list, name_list
+
+
+def load_scarce(root="data/Dataset", train=True):
+    return load_airfrans(root=root, task="scarce", train=train)
+
+
+def load_scarce_cached(root="data/Dataset", train=True, cache_dir="data/cache"):
+    return load_airfrans_cached(root=root, task="scarce", train=train, cache_dir=cache_dir)
 
 
 def split_train_val(data_list, name_list, n_val=20, seed=0):
