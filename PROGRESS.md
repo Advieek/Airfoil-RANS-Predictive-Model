@@ -48,4 +48,20 @@
   Headless test (scripts/step8_gate7_headless_test.py) exercised 3 (airfoil, AoA, Re) combos with no Streamlit server running — all passed, predict step 2-3ms each (well sub-second; geometry generation 6-104ms, only paid once per airfoil not per slider move).
   `streamlit run app.py --server.headless true` started cleanly (no tracebacks in logs/streamlit.log), confirmed serving at http://localhost:8501 (HTTP 200).
 - **GATE 7 PASSED**: GIF plays and visibly sharpens; headless 3-combo test passed; `streamlit run app.py` starts cleanly and serves. Both TensorBoard (http://localhost:6006) and Streamlit (http://localhost:8501) are live in the background for the user to open in their browser.
-- Next: Step 9 — GraphSAGE upgrade, smoke run, then ask user before launching the full overnight run, Gate 8.
+- [2026-07-07] Step 9: GraphSAGE added to src/models.py (SAGEConv layers, k=10). Initial attempt used `torch_geometric.nn.knn_graph`, which failed: `ImportError: 'knn_graph' requires 'pyg-lib>=0.6.0'` (not installed, not in the original package list, and not trivially pip-installable on Apple Silicon). Replaced with a custom `build_graph` using `scipy.spatial.cKDTree` (CPU-side k-NN query, same as the "some scatter ops fall back to CPU" caveat the spec already anticipates) — no new compiled dependency needed.
+- 10-epoch smoke run (graphsage_smoke10, 16000 points/sim): train_loss 0.76→0.25, val_loss 1.24→0.72 over 10 epochs — comparable trajectory to the MLP's smoke run, confirms the training/logging mechanics work for GraphSAGE too. BUT much slower than MLP: ~22s/epoch vs MLP's ~1.7s/epoch (per-sim k-NN graph construction dominates), so a 400-epoch run is ~2.4h, not minutes.
+- Asked the user how to proceed given the ~2.4h estimate (per BUILD_SPEC's explicit "Ask the user" instruction for this step) — user chose the full 400-epoch run for direct epoch-for-epoch TensorBoard comparison with the MLP curve.
+- **Launched**: `nohup caffeinate -i python3 -m src.train --mode real --model graphsage --epochs 400 --n-points 16000 --run-name graphsage_scarce > logs/graphsage_scarce.log 2>&1 &` (background, detached, survives Mac sleep via caffeinate). Started 2026-07-07 ~18:06, expected finish ~20:30 (±30min).
+- Wrote `morning_after.sh` (executable): checks the training process has exited, runs Step 6 evaluation on the new checkpoint (`checkpoints/graphsage_scarce_best.pt` → `checkpoints/eval_results_graphsage.json`), prints an MLP-vs-GraphSAGE comparison table, regenerates the evolution GIF as `plots/training_evolution_graphsage.gif`, and repoints `src/app_core.py`/`predict.py`'s default checkpoint at the new GraphSAGE weights.
+- Wrote README.md (setup, usage, results table, known limitations, morning-after instructions).
+- **GATE 8**: smoke losses logged ✓; long run launched (verified alive via `ps aux`, PID recorded in this log) ✓; PROGRESS.md ends with exact morning-after instructions ✓ (see below). Final commit follows this entry.
+
+## Morning-after instructions (exact)
+
+1. Check the run finished: `tail -5 runs/graphsage_scarce/losses.csv` should show epoch 399. If `pgrep -f "src.train --mode real --model graphsage"` still returns a PID, it's not done yet — wait.
+2. Run `./morning_after.sh` from the repo root. It is idempotent and self-checks that training has finished before doing anything.
+3. Read the printed MLP-vs-GraphSAGE comparison table (Cl/Cd relative error + Spearman on the real test set) and add it to this file under a new dated entry.
+4. Sanity-check `plots/training_evolution_graphsage.gif` plays and sharpens, same as the MLP one did.
+5. `git add -A && git commit -m "Step 9: GraphSAGE results, switch default checkpoint"`.
+6. If `streamlit run app.py` was left running from Step 8, restart it (Streamlit's `@st.cache_resource` will otherwise keep serving the old MLP checkpoint from before the `sed` edit) so it picks up the new default checkpoint.
+7. Optional next steps (out of scope for today, see BUILD_SPEC "Scope discipline"): retrain on `full` (800 sims) instead of `scarce`, hyperparameter sweep, seed ensembles for uncertainty, `reynolds`/`aoa` extrapolation tasks, PointNet/Graph U-Net, activation-hook "peek inside" view in the app.

@@ -1,4 +1,5 @@
 """Per-point MLP and GraphSAGE surrogate models."""
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -40,9 +41,22 @@ class GraphSAGENet(nn.Module):
         return self.out(h)
 
     def build_graph(self, pos):
-        from torch_geometric.nn import knn_graph
+        """k-NN graph via scipy cKDTree instead of torch_geometric.nn.knn_graph,
+        which requires the pyg-lib/torch-cluster compiled backend (not part of
+        the fresh-Mac install list and not trivially pip-installable on Apple
+        Silicon). cKDTree runs on CPU regardless of pos's device -- the
+        BUILD_SPEC already expects some scatter/graph ops to fall back off MPS."""
+        from scipy.spatial import cKDTree
 
-        return knn_graph(pos, k=self.k, loop=False)
+        pos_np = pos.detach().cpu().numpy()
+        tree = cKDTree(pos_np)
+        _, idx = tree.query(pos_np, k=self.k + 1)  # includes self at k=0
+        idx = idx[:, 1:]  # drop self
+        n = pos_np.shape[0]
+        src = np.repeat(np.arange(n), self.k)
+        dst = idx.reshape(-1)
+        edge_index = np.stack([dst, src], axis=0)  # message flows neighbor -> center
+        return torch.from_numpy(edge_index).long().to(pos.device)
 
 
 def build_model(name, **kwargs):
