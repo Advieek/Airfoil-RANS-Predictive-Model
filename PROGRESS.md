@@ -1,5 +1,12 @@
 # PROGRESS
 
+## 2026-07-08, past midnight — concurrent-training contention discovered, switched to sequential
+
+- After ~2h43m of both runs going concurrently, checked *actual* wall-clock epoch rate (`ps -o etime=`) rather than trusting early small-sample estimates: MLP was at 38 epochs in 9824s ≈ 258.5s/epoch (vs the ~103s/epoch isolated smoke-test benchmark) and GraphSAGE at 19 epochs in 9811s ≈ 516s/epoch (vs the ~366s/epoch estimate used when asking the user). Both ≈2.5x slower than expected — the two processes are contending for the same MPS GPU. At that pace: MLP → ~28.7h, GraphSAGE → ~57h, both far worse than the separate estimates each was individually approved at.
+- Realized concurrent vs. sequential total wall-clock is roughly a wash (contention roughly conserves total GPU-seconds), but sequential gets the MLP result ~2.5x sooner (~11.5h vs ~28.7h) since it would run unshared. Asked the user; chose sequential.
+- **Paused GraphSAGE with `kill -STOP 10202`** (not killed) — freezes the process in memory with full state intact (model weights, optimizer state, epoch counter all preserved, no checkpoint/resume code needed since nothing is destroyed). Confirmed via `ps` (state `T`). MLP's CPU usage jumped immediately after (mid-40s% → 105%+), confirming it was indeed GPU-contended before. `caffeinate` left running on both PIDs so the Mac won't sleep during the pause.
+- Plan: let MLP finish alone at full speed, then `kill -CONT` on GraphSAGE's PID to resume it exactly where it left off, running alone at full speed for its remaining ~381 epochs.
+
 ## 2026-07-07, night — Scale-up for M4 Pro / 64GB (post-GraphSAGE follow-up)
 
 User corrected the assumed hardware: this is an M4 Pro (14 CPU cores, 20 GPU cores), 64GB unified memory, not the 16GB Mac mini the BUILD_SPEC assumed. Asked to redo the build exploiting this: `full` task (800 sims) as a minimum, full resolution, bigger batches/model capacity.
