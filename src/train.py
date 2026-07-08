@@ -9,8 +9,10 @@ Usage:
 """
 import argparse
 import csv
+import gc
 import json
 import os
+import resource
 import time
 
 import matplotlib
@@ -228,17 +230,25 @@ def run_real(args):
             opt.step()
             train_loss_sum += loss.item()
             n_steps += 1
-            if device.type == "mps" and n_steps % 20 == 0:
+            del pred, y_cat, loss
+            if device.type == "mps" and n_steps % 5 == 0:
                 # MPS's caching allocator retains freed blocks per unique shape for reuse.
                 # Full-resolution batches concatenate a different combination of
                 # variable-length sims every step, so shapes rarely repeat -- without
                 # periodic release the cache grows effectively unbounded over a multi-hour
                 # run (observed: one process reached 219GB RSS / 139GB compressed on this
-                # 64GB machine, near-zero free memory, before this fix).
+                # 64GB machine, near-zero free memory, before this fix; a first attempt at
+                # a fix with a 20-step interval and no gc.collect() slowed but did not
+                # eliminate the growth -- it still silently died, likely OOM-killed by the
+                # kernel, around epoch 235). Pairing with gc.collect() covers the case where
+                # a reference cycle (e.g. in the autograd graph) delays Python from dropping
+                # a tensor's refcount to zero before the allocator can reclaim it.
+                gc.collect()
                 torch.mps.empty_cache()
         sched.step()
         train_loss = train_loss_sum / n_steps
         if device.type == "mps":
+            gc.collect()
             torch.mps.empty_cache()
 
         model.eval()
@@ -249,10 +259,13 @@ def run_real(args):
                 loss = torch.nn.functional.mse_loss(pred, y_cat)
                 val_loss_sum += loss.item()
                 n_val_steps += 1
-                if device.type == "mps" and n_val_steps % 20 == 0:
+                del pred, y_cat, loss
+                if device.type == "mps" and n_val_steps % 5 == 0:
+                    gc.collect()
                     torch.mps.empty_cache()
         val_loss = val_loss_sum / n_val_steps
         if device.type == "mps":
+            gc.collect()
             torch.mps.empty_cache()
 
         writer.add_scalar("loss/train", train_loss, epoch)
@@ -262,6 +275,18 @@ def run_real(args):
                 writer.add_histogram(f"weights/{name}", p, epoch)
         csv_writer.writerow([epoch, train_loss, val_loss])
         csv_file.flush()
+
+        rss_gb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1e9
+        writer.add_scalar("system/rss_gb", rss_gb, epoch)
+        if rss_gb > args.rss_limit_gb:
+            print(
+                f"epoch {epoch}: RSS {rss_gb:.1f}GB exceeded --rss-limit-gb {args.rss_limit_gb} "
+                "-- stopping cleanly to avoid a silent OOM-kill. Best checkpoint is already saved; "
+                "resume with --init-from."
+            )
+            csv_file.close()
+            writer.close()
+            return best_val, ckpt_path
 
         if val_loss < best_val:
             best_val = val_loss
@@ -316,6 +341,12 @@ def get_args():
     p.add_argument("--gnn-knn-backend", choices=["mps_chunked", "cpu_kdtree"], default="mps_chunked")
     p.add_argument("--n-val", type=int, default=None, help="default: 10%% of train sims")
     p.add_argument("--init-from", default=None, help="warm-start model weights from a checkpoint")
+    p.add_argument(
+        "--rss-limit-gb",
+        type=float,
+        default=40.0,
+        help="stop cleanly (best checkpoint already saved) if peak RSS exceeds this, rather than risk a silent kernel OOM-kill",
+    )
     p.add_argument("--data-root", default="data/Dataset")
     p.add_argument("--run-name", default="mlp_scarce")
     p.add_argument("--evolution-every", type=int, default=10)

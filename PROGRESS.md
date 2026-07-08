@@ -1,5 +1,17 @@
 # PROGRESS
 
+## 2026-07-08, night — mlp_full_fullres_v2 silently died (~epoch 235); strengthened the memory fix
+
+The morning's `empty_cache()` fix slowed the leak but did not eliminate it: `mlp_full_fullres_v2` ran healthily through several 2-hourly checks (RSS fluctuating 8-12GB, looked fine each time) but was found completely gone — not in `ps`, no zombie — during a routine check around epoch 235/400. `logs/mlp_full_fullres_v2.log` was empty (no Python traceback), consistent with a silent kernel OOM-kill (SIGKILL gives the process no chance to log anything); couldn't get a definitive confirmation from `log show` (predicate-quoting issues in this shell, and/or the relevant window had rotated out), but the signature matches the morning's incident closely enough to treat it as the same underlying cause recurring on a longer timescale.
+- **Impact**: minimal. Best checkpoint was current and intact (epoch 199, val_loss 0.240 — better than what was last reported in conversation), backed up immediately.
+- **Strengthened the fix** (`src/train.py`):
+  - Reduced the `empty_cache()` interval from every 20 steps to every 5.
+  - Added `gc.collect()` paired with every `empty_cache()` call — covers the case where a reference cycle (plausibly in the autograd graph) delays CPython's refcounting from reaching zero before the allocator can reclaim the memory, which `empty_cache()` alone can't fix.
+  - Added explicit `del pred, y_cat, loss` after each step, before the cache-clearing block, to drop references as early as possible.
+  - **New**: a self-protection guard. Every epoch, checks its own peak RSS (`resource.getrusage(RUSAGE_SELF).ru_maxrss`, bytes on macOS) against a new `--rss-limit-gb` flag (default 40). If exceeded, it stops *cleanly* (best checkpoint already saved, CSV/TensorBoard writer closed properly) with a clear log message, instead of silently dying to a kernel OOM-kill with zero diagnostic trace. This is the more important change: even if the underlying leak isn't fully eliminated, the failure mode changes from "silently vanishes, discovered by chance on a status check" to "exits loudly with a checkpoint ready for --init-from".
+- Verified via a 3-epoch smoke run (warm-started from the epoch-199 backup): completed cleanly, no RSS-limit trip, losses continued improving (val_loss 0.2655 by epoch 2, matching expectations for a model already at 0.240).
+- **Relaunched**: `mlp_full_fullres_v3`, warm-started from `checkpoints/mlp_full_fullres_v2_epoch199_backup.pt`, `--rss-limit-gb 40`. If this run also hits the RSS limit, the next step should be investigating the actual retained-object source directly (e.g. `torch.mps.driver_allocated_memory()` trend logged per-epoch, or a memory profiler) rather than continuing to strengthen the same blunt mitigation.
+
 ## 2026-07-08, morning — MPS memory leak found and fixed in mlp_full_fullres
 
 During a routine 2-hourly check-in (epoch 191/400, val_loss 0.327), a low CPU%(22%) reading on the MLP process prompted a memory check. Found a serious leak:
