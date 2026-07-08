@@ -196,13 +196,36 @@ def run_real(args):
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs)
 
+    os.makedirs(args.out_dir, exist_ok=True)
+    ckpt_path = os.path.join(args.out_dir, f"{args.run_name}_best.pt")
+    resume_ckpt_path = os.path.join(args.out_dir, f"{args.run_name}_resume.pt")
+
+    start_epoch = 0
+    best_val = float("inf")
+    if args.resume_from:
+        # Full training-state restore (model + optimizer + scheduler + epoch counter),
+        # unlike --init-from which only warm-starts the weights into a fresh 400-epoch
+        # schedule. This is what makes a crash genuinely resumable instead of costing
+        # most of a day's progress each time: see PROGRESS.md 2026-07-08 entries.
+        resume_ckpt = torch.load(args.resume_from, map_location="cpu", weights_only=False)
+        model.load_state_dict(resume_ckpt["model_state"])
+        opt.load_state_dict(resume_ckpt["optimizer_state"])
+        sched.load_state_dict(resume_ckpt["scheduler_state"])
+        start_epoch = resume_ckpt["epoch"] + 1
+        best_val = resume_ckpt["best_val"]
+        print(
+            f"resumed from {args.resume_from}: continuing at epoch {start_epoch}/{args.epochs}, "
+            f"best_val so far {best_val:.4f}"
+        )
+
     run_dir = os.path.join("runs", args.run_name)
     writer = SummaryWriter(run_dir)
     csv_path = os.path.join(run_dir, "losses.csv")
     os.makedirs(run_dir, exist_ok=True)
-    csv_file = open(csv_path, "w", newline="")
+    csv_file = open(csv_path, "a" if args.resume_from else "w", newline="")
     csv_writer = csv.writer(csv_file)
-    csv_writer.writerow(["epoch", "train_loss", "val_loss"])
+    if not args.resume_from:
+        csv_writer.writerow(["epoch", "train_loss", "val_loss"])
 
     evo_idx = 0
     evo_name = val_names[evo_idx]
@@ -214,11 +237,22 @@ def run_real(args):
         stats["x_std"], dtype=np.float32
     )
 
-    best_val = float("inf")
-    os.makedirs(args.out_dir, exist_ok=True)
-    ckpt_path = os.path.join(args.out_dir, f"{args.run_name}_best.pt")
+    def save_resume_checkpoint(epoch):
+        torch.save(
+            {
+                "model_state": model.state_dict(),
+                "optimizer_state": opt.state_dict(),
+                "scheduler_state": sched.state_dict(),
+                "model_name": args.model,
+                "model_kwargs": model_kwargs,
+                "norm_stats_path": "checkpoints/norm_stats.json",
+                "epoch": epoch,
+                "best_val": best_val,
+            },
+            resume_ckpt_path,
+        )
 
-    for epoch in range(args.epochs):
+    for epoch in range(start_epoch, args.epochs):
         train_ds.set_epoch(epoch)
         model.train()
         train_loss_sum, n_steps = 0.0, 0
@@ -281,9 +315,10 @@ def run_real(args):
         if rss_gb > args.rss_limit_gb:
             print(
                 f"epoch {epoch}: RSS {rss_gb:.1f}GB exceeded --rss-limit-gb {args.rss_limit_gb} "
-                "-- stopping cleanly to avoid a silent OOM-kill. Best checkpoint is already saved; "
-                "resume with --init-from."
+                "-- stopping cleanly to avoid a silent OOM-kill. Saving a full resume checkpoint; "
+                f"continue with --resume-from {resume_ckpt_path}."
             )
+            save_resume_checkpoint(epoch)
             csv_file.close()
             writer.close()
             return best_val, ckpt_path
@@ -301,6 +336,9 @@ def run_real(args):
                 },
                 ckpt_path,
             )
+
+        if epoch % args.checkpoint_every == 0 or epoch == args.epochs - 1:
+            save_resume_checkpoint(epoch)
 
         if epoch % args.evolution_every == 0:
             model.eval()
@@ -340,7 +378,14 @@ def get_args():
     p.add_argument("--gnn-k", type=int, default=16)
     p.add_argument("--gnn-knn-backend", choices=["mps_chunked", "cpu_kdtree"], default="mps_chunked")
     p.add_argument("--n-val", type=int, default=None, help="default: 10%% of train sims")
-    p.add_argument("--init-from", default=None, help="warm-start model weights from a checkpoint")
+    p.add_argument("--init-from", default=None, help="warm-start model weights only (fresh optimizer/schedule/epoch 0)")
+    p.add_argument(
+        "--resume-from",
+        default=None,
+        help="fully resume training (model+optimizer+scheduler+epoch counter) from a "
+        "--checkpoint-every / RSS-limit resume checkpoint; continues the same run's CSV/TensorBoard log",
+    )
+    p.add_argument("--checkpoint-every", type=int, default=10, help="save a full resumable checkpoint every N epochs")
     p.add_argument(
         "--rss-limit-gb",
         type=float,
