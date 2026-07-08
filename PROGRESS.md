@@ -1,5 +1,15 @@
 # PROGRESS
 
+## 2026-07-09 — leak still present even with the strengthened fix; added an auto-resuming supervisor
+
+Restarted MLP as `mlp_full_fullres_v4` with the new `--checkpoint-every 10` (previous entry). Within an hour, sustained monitoring (6 readings over 3 minutes, not just a single snapshot) showed RSS climbing steadily -- 22.5→23.4GB, ~27GB/hour, no down-ticks -- confirming the strengthened `empty_cache()`+`gc.collect()` mitigation slows but does not eliminate the underlying MPS caching-allocator growth. Root cause is still not fully understood (deeper investigation -- e.g. logging `torch.mps.driver_allocated_memory()` per-epoch, or a proper memory profiler -- is the right next step if this keeps recurring, rather than continuing to tighten the same blunt mitigation).
+
+Given the demonstrated recurrence, rather than keep manually noticing-and-restarting on each 2-hourly check, wrote `scripts/train_supervised.sh`: a supervisor loop that launches training, and on *any* exit (RSS-limit safety stop, crash, anything) before the target epoch, automatically relaunches with `--resume-from` the latest periodic checkpoint. Loops until the run actually reaches its final epoch. This closes the loop the `--resume-from` feature opened: previously a human (me) still had to notice the clean exit and manually issue the resume command; now that happens automatically within ~10s of any exit.
+
+Switched the live run over: stopped the unsupervised `mlp_full_fullres_v4` (epoch 36, resume checkpoint at epoch 30 intact), relaunched under `caffeinate -i ./scripts/train_supervised.sh mlp_full_fullres_v4 400 -- <same args>`. Verified it correctly detected the existing resume checkpoint, resumed at epoch 31, and is progressing normally. From here, the RSS-limit guard + supervisor combination means the leak (whatever its root cause) can no longer cost lost progress or require manual intervention -- worst case is a ~10-epoch replay and brief pause every time it trips, fully automatic.
+
+GraphSAGE (`graphsage_full_64k`) remains paused with the old code, still needs the same supervisor treatment when it's resumed.
+
 ## 2026-07-08, night — true resumable checkpointing added (not just weight warm-start)
 
 User asked why each recovery restarted the epoch counter / LR schedule from scratch, given checkpoints existed and TensorBoard shows full history. Answer: the checkpoint format only ever saved `model_state` (weights) -- not optimizer state (Adam momentum/variance), not the LR scheduler's position, not an epoch counter to resume the loop from. `--init-from` was a *warm start* (good initialization, fresh 400-epoch cosine schedule restarting at epoch 0), not a *true resume*. TensorBoard just renders whatever's in the log directory -- it has no ability to feed state back into a new process; that's purely a function of what `torch.save`/`torch.load` capture.
