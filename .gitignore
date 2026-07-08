@@ -6,6 +6,6 @@ __pycache__/
 *.pyc
 .DS_Store
 *.zip
-.claude/settings.local.json
+.claude/
 logs/
 plots/evolution/*.png

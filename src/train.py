@@ -185,6 +185,10 @@ def run_real(args):
             "knn_backend": args.gnn_knn_backend,
         }
     model = build_model(args.model, **model_kwargs).to(device)
+    if args.init_from:
+        init_ckpt = torch.load(args.init_from, map_location="cpu", weights_only=False)
+        model.load_state_dict(init_ckpt["model_state"])
+        print(f"warm-started from {args.init_from} (epoch {init_ckpt['epoch']}, val_loss {init_ckpt['val_loss']:.4f})")
     n_params = sum(p.numel() for p in model.parameters())
     print(f"model={args.model} params={n_params:,} kwargs={model_kwargs}")
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -224,8 +228,18 @@ def run_real(args):
             opt.step()
             train_loss_sum += loss.item()
             n_steps += 1
+            if device.type == "mps" and n_steps % 20 == 0:
+                # MPS's caching allocator retains freed blocks per unique shape for reuse.
+                # Full-resolution batches concatenate a different combination of
+                # variable-length sims every step, so shapes rarely repeat -- without
+                # periodic release the cache grows effectively unbounded over a multi-hour
+                # run (observed: one process reached 219GB RSS / 139GB compressed on this
+                # 64GB machine, near-zero free memory, before this fix).
+                torch.mps.empty_cache()
         sched.step()
         train_loss = train_loss_sum / n_steps
+        if device.type == "mps":
+            torch.mps.empty_cache()
 
         model.eval()
         val_loss_sum, n_val_steps = 0.0, 0
@@ -235,7 +249,11 @@ def run_real(args):
                 loss = torch.nn.functional.mse_loss(pred, y_cat)
                 val_loss_sum += loss.item()
                 n_val_steps += 1
+                if device.type == "mps" and n_val_steps % 20 == 0:
+                    torch.mps.empty_cache()
         val_loss = val_loss_sum / n_val_steps
+        if device.type == "mps":
+            torch.mps.empty_cache()
 
         writer.add_scalar("loss/train", train_loss, epoch)
         writer.add_scalar("loss/val", val_loss, epoch)
@@ -297,6 +315,7 @@ def get_args():
     p.add_argument("--gnn-k", type=int, default=16)
     p.add_argument("--gnn-knn-backend", choices=["mps_chunked", "cpu_kdtree"], default="mps_chunked")
     p.add_argument("--n-val", type=int, default=None, help="default: 10%% of train sims")
+    p.add_argument("--init-from", default=None, help="warm-start model weights from a checkpoint")
     p.add_argument("--data-root", default="data/Dataset")
     p.add_argument("--run-name", default="mlp_scarce")
     p.add_argument("--evolution-every", type=int, default=10)
