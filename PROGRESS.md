@@ -1,5 +1,9 @@
 # PROGRESS
 
+## OUTSTANDING TODO (check this before resuming GraphSAGE)
+
+- **GraphSAGE (`graphsage_full_64k`) must be relaunched under `scripts/train_supervised.sh` before resuming, not just `kill -CONT`ed.** It's currently paused (frozen via `SIGSTOP`, PID 10202) running the *old* training code from before `--checkpoint-every`/`--resume-from`/the auto-resuming supervisor existed. A plain `kill -CONT` would let it keep running unprotected -- no periodic resumable checkpoint, no RSS-limit self-guard, no auto-restart on crash -- exactly the unprotected state that cost the MLP run most of a day before these features existed (see the 2026-07-08/09 entries below). Instead: stop it cleanly, warm-start (`--init-from`, since the paused process's in-memory optimizer state can't be extracted) from its current best checkpoint, and launch via `caffeinate -i ./scripts/train_supervised.sh graphsage_full_64k 400 -- <graphsage args> --rss-limit-gb 40 --checkpoint-every 10`, same pattern as `mlp_full_fullres_v4`.
+
 ## 2026-07-09 — leak still present even with the strengthened fix; added an auto-resuming supervisor
 
 Restarted MLP as `mlp_full_fullres_v4` with the new `--checkpoint-every 10` (previous entry). Within an hour, sustained monitoring (6 readings over 3 minutes, not just a single snapshot) showed RSS climbing steadily -- 22.5→23.4GB, ~27GB/hour, no down-ticks -- confirming the strengthened `empty_cache()`+`gc.collect()` mitigation slows but does not eliminate the underlying MPS caching-allocator growth. Root cause is still not fully understood (deeper investigation -- e.g. logging `torch.mps.driver_allocated_memory()` per-epoch, or a proper memory profiler -- is the right next step if this keeps recurring, rather than continuing to tighten the same blunt mitigation).
