@@ -5,8 +5,10 @@ const toolbarEl = document.getElementById("preview-toolbar");
 const downloadLink = document.getElementById("download-link");
 const previewMeta = document.getElementById("preview-meta");
 
-const ICON_DIR = "📁";
-const ICON_FILE = "📄";
+// Plain text glyphs, not emoji -- emoji render in their own fixed colors
+// regardless of CSS, which would break the monochrome theme.
+const ICON_DIR = "▸";
+const ICON_FILE = "·";
 
 function fmtSize(bytes) {
   if (bytes == null) return "";

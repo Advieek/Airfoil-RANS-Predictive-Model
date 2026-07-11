@@ -1,5 +1,18 @@
 # PROGRESS
 
+## 2026-07-11 — monochrome redesign (Saint Laurent / Tom Ford aesthetic)
+
+User asked for the site to be remade in full black-and-white, sharp/minimalist/premium, referencing high-fashion houses. Complete rewrite of `web/static/css/style.css`: pure black/white surfaces (true opposites in light/dark, not just muted grays), zero border-radius anywhere, hairline 1px rules replacing filled card backgrounds, heavy-tracked uppercase for chrome (nav, labels, buttons, eyebrow tags) against light-weight (350) body copy for editorial contrast, high-contrast invert-on-hover buttons.
+
+Monochrome forces every data encoding that used to lean on hue to fall back on luminance, which took real thought, not just search-and-replace on the old CSS variables:
+- **Categorical** (the 4-model comparison table): fixed grayscale steps ordered by rank -- darkest/most prominent = best performing, lightest = worst -- rather than an arbitrary hue cycle. Labels stay the primary identifier regardless (dataviz skill's non-negotiable: color/luminance reinforces, never carries identity alone).
+- **Sequential** (the Tool page's pressure/velocity field): switched from the validated blue ramp to a pure grayscale ramp, mode-aware (light mode: light-to-black for low-to-high magnitude; dark mode: dark-to-white). This one turned out to be a genuine improvement independent of the color mandate -- grayscale sequential encoding is a legitimate, classic scientific-visualization choice (matplotlib's `gray` colormap, schlieren/shadowgraph photography), and the result reads like a wind-tunnel visualization rather than a compromise. Screenshotted both modes to confirm: light mode looks like pencil/ink on paper, dark mode looks like a shadowgraph photograph.
+- Existing pre-rendered plots (matplotlib PNGs/GIFs from earlier evaluation work) were left in their original colors rather than regenerated -- reframed instead as "matted prints" (white-bordered frame, sharp hairline edge) against the black/white page, which reads as gallery presentation rather than a color clash.
+
+**Caught one theme-breaking detail during review, not just at build time**: the file browser's folder/file icons were emoji (📁📄), which render in their own fixed OS colors regardless of CSS -- the one thing on the whole site that couldn't be forced monochrome by design. Swapped for plain text glyphs (▸ for directories, · for files) that inherit the ink color like any other text. Also swapped the warning-banner's ⚠ character for a plain `!` for the same reason (emoji-vs-text-presentation of that glyph is font/OS-dependent, not worth the risk).
+
+Verified via headless-Chrome screenshots of all 5 pages in both light and dark mode (`--blink-settings=preferredColorScheme=1/2`) before calling it done, same discipline as the original build.
+
 ## 2026-07-11 — full project audit
 
 Checked the whole repo for errors before starting the visual redesign: syntax-parsed every `.py` file (none), imported every key module (`src.*`, `web.api`) fresh (none), diffed `requirements.txt` against the actual venv (in sync), checked every internal href/src in the website templates resolves (all do), checked no large/binary files were accidentally git-tracked (largest tracked file is a 928KB GIF, fine), and cross-referenced every `checkpoints/*.pt` path used anywhere in the codebase against what's actually on disk (all present).
