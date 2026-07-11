@@ -119,3 +119,27 @@ detail, or `web/api.py`'s `MODELS` registry.
   test sims), so Cd sign/magnitude on new shapes is noisier still.
 - No hyperparameter tuning, single seed per model — intentionally out of
   scope (see `BUILD_SPEC`'s "Scope discipline").
+
+## Next steps
+
+- **Fix GraphSAGE's point-density sensitivity for arbitrary airfoils** — the
+  actual root cause behind why the Tool page defaults to the MLP. Likely fix:
+  subsample the Tool's synthetic point clouds to match GraphSAGE's training
+  density (64k pts) before inference, or train with randomized point density
+  so the model generalizes across densities instead of overfitting to one.
+- **PointNet / Graph U-Net**, seed ensembles for uncertainty, `reynolds`/`aoa`
+  extrapolation tasks, validation against XFOIL on non-NACA shapes — all
+  explicitly deferred in the original build spec, still open.
+- **Automated tests.** Everything so far is ad-hoc verification scripts
+  (`scripts/step*_gate*.py`) run manually; a real `pytest` suite covering the
+  data pipeline, force integration, and API endpoints would catch regressions
+  the way this audit caught them by hand.
+- **Clean up `checkpoints/`** — several intermediate/backup checkpoints from
+  the training-crash recoveries (`*_epoch*_backup.pt`) are no longer needed
+  now that the final runs completed; safe to archive or delete.
+- **Understand the MPS memory leak's actual root cause** rather than the
+  current mitigation (periodic `empty_cache()` + a self-protecting RSS limit
+  + auto-restart). The workarounds make it harmless, but the underlying
+  cause in PyTorch's MPS allocator was never isolated.
+- If this ever needs to run beyond localhost: add auth/rate-limiting to the
+  API, a Dockerfile, and reconsider the file browser's read access scope.
