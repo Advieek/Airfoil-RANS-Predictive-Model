@@ -1,5 +1,17 @@
 # PROGRESS
 
+## 2026-07-11 — full project audit
+
+Checked the whole repo for errors before starting the visual redesign: syntax-parsed every `.py` file (none), imported every key module (`src.*`, `web.api`) fresh (none), diffed `requirements.txt` against the actual venv (in sync), checked every internal href/src in the website templates resolves (all do), checked no large/binary files were accidentally git-tracked (largest tracked file is a 928KB GIF, fine), and cross-referenced every `checkpoints/*.pt` path used anywhere in the codebase against what's actually on disk (all present).
+
+Found and fixed four real issues, none of them silent-data-corruption-level but all worth catching:
+- **`morning_after.sh` was live ammunition.** Written for the original scarce-task GraphSAGE run, it `sed`-rewrites `src/app_core.py`'s `CHECKPOINT` constant back to `graphsage_scarce_best.pt` unconditionally. Running it today would have silently undone the density-mismatch fix from the previous session (which deliberately set the Tool's default to the MLP, not GraphSAGE, for good evidence-based reasons). Replaced the script body with a hard-exit deprecation notice pointing at the current equivalents (`src.evaluate` CLI, `scripts/make_evolution_gif.py`, `scripts/train_supervised.sh`) rather than deleting it outright, so the history stays legible.
+- **`src/evaluate.py`'s CLI `--checkpoint` default** was still `mlp_scarce_best.pt`, inconsistent with `predict.py` and `src/app_core.py` (both already updated to `mlp_full_fullres_v4_best.pt`). Low-stakes since every real invocation in this project always passes `--checkpoint` explicitly, but fixed for consistency.
+- **`.gitignore` had a dead line**: `plots/evolution/*.png` was meant to exclude evolution snapshots but a bare `*` doesn't cross directory boundaries in gitignore syntax, and every evolution PNG lives one level deeper (`plots/evolution/<run_name>/epoch_NNNN.png`). It never matched anything -- which happened to be the *right* outcome (the spec wants evolution frames tracked as deliverables, established back on 2026-07-07), but the line was misleading dead weight. Removed.
+- **Streamlit process was stale.** It had been running since before the checkpoint-default fixes, and `@st.cache_resource` means it was still serving predictions from whatever checkpoint was loaded at its original launch, not the corrected current default. Restarted it.
+
+Nothing else found: no syntax/import errors, no broken links, no dependency drift, no missing checkpoint files.
+
 ## 2026-07-11 — multi-page website (FastAPI), replacing Streamlit as the primary interface
 
 User asked for a proper multi-page website (Home / How it works / Results / Tool / Files) instead of Streamlit, styled after their personal site (advieek.com) -- couldn't scrape its actual styling since it's a JS SPA (hash routing), so approximated a minimal/professional aesthetic instead, using the dataviz skill's validated default palette (`references/palette.md`) for both the site's color system and the chart/colormap work, rather than picking colors ad hoc.

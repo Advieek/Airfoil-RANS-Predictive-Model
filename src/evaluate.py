@@ -145,7 +145,7 @@ if __name__ == "__main__":
     import json
 
     p = argparse.ArgumentParser()
-    p.add_argument("--checkpoint", default="checkpoints/mlp_scarce_best.pt")
+    p.add_argument("--checkpoint", default="checkpoints/mlp_full_fullres_v4_best.pt")
     p.add_argument("--n-sims", type=int, default=None)
     p.add_argument("--out", default="checkpoints/eval_results.json")
     args = p.parse_args()
