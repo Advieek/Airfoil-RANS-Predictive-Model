@@ -1,5 +1,19 @@
 data/
-checkpoints/
+# checkpoints/: keep the 4 canonical *_best.pt checkpoints + their metadata
+# tracked (small, ~2.3MB total) so a fresh clone has working models out of
+# the box -- everything else in here (backups, resume state, intermediate
+# training checkpoints, smoke-test artifacts) is excluded.
+checkpoints/*
+!checkpoints/mlp_scarce_best.pt
+!checkpoints/graphsage_scarce_best.pt
+!checkpoints/mlp_full_fullres_v4_best.pt
+!checkpoints/graphsage_full_64k_best.pt
+!checkpoints/norm_stats.json
+!checkpoints/eval_results_mlp.json
+!checkpoints/eval_results_graphsage.json
+!checkpoints/eval_results_mlp_full_fullres.json
+!checkpoints/eval_results_graphsage_full_64k.json
+!checkpoints/model.onnx
 runs/
 .venv/
 __pycache__/

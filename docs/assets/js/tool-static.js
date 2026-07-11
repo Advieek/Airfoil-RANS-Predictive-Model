@@ -108,6 +108,24 @@ function getField() {
   return document.querySelector('input[name="field"]:checked').value;
 }
 
+/** Built via DOM APIs, not innerHTML template interpolation -- these strings
+ * can originate from exception messages or a parsed .dat file, and
+ * textContent-based construction means they're never parsed as markup. */
+function renderWarnings(container, messages) {
+  container.innerHTML = '';
+  for (const msg of messages) {
+    const div = document.createElement('div');
+    div.className = 'warning-banner';
+    const icon = document.createElement('span');
+    icon.className = 'icon';
+    icon.textContent = '!';
+    const text = document.createElement('span');
+    text.textContent = msg;
+    div.append(icon, text);
+    container.appendChild(div);
+  }
+}
+
 let debounceTimer = null;
 function schedulePredict() {
   clearTimeout(debounceTimer);
@@ -148,13 +166,13 @@ async function predict() {
     const code = els.nacaCode.value.trim();
     if (!code) return;
     if (code.length !== 4) {
-      els.warnings.innerHTML = `<div class="warning-banner"><span class="icon">!</span><span>Only 4-digit NACA codes are supported in this fully client-side build.</span></div>`;
+      renderWarnings(els.warnings, ['Only 4-digit NACA codes are supported in this fully client-side build.']);
       return;
     }
     try {
       rawCoords = G.nacaAirfoil4Digit(code, 200);
     } catch (e) {
-      els.warnings.innerHTML = `<div class="warning-banner"><span class="icon">!</span><span>${e.message}</span></div>`;
+      renderWarnings(els.warnings, [e.message]);
       return;
     }
   } else {
@@ -164,7 +182,7 @@ async function predict() {
     rawCoords = G.parseDatText(text);
     warnings.push('Arbitrary .dat geometry -- accuracy degrades outside the NACA 4/5-digit family the model trained on.');
     if (rawCoords.length < 10) {
-      els.warnings.innerHTML = `<div class="warning-banner"><span class="icon">!</span><span>Could not parse enough points from that .dat file.</span></div>`;
+      renderWarnings(els.warnings, ['Could not parse enough points from that .dat file.']);
       return;
     }
   }
@@ -211,7 +229,7 @@ async function predict() {
   } catch (e) {
     console.error(e);
     els.status.textContent = '';
-    els.warnings.innerHTML = `<div class="warning-banner"><span class="icon">!</span><span>${e.message || e}</span></div>`;
+    renderWarnings(els.warnings, [e.message || String(e)]);
   }
 }
 
@@ -219,7 +237,7 @@ function render({ cl, cd, warnings, position, pred, n }) {
   els.status.textContent = '';
   els.clValue.textContent = cl.toFixed(3);
   els.cdValue.textContent = cd.toFixed(4);
-  els.warnings.innerHTML = warnings.map((w) => `<div class="warning-banner"><span class="icon">!</span><span>${w}</span></div>`).join('');
+  renderWarnings(els.warnings, warnings);
 
   const field = getField();
   const values = new Float32Array(n);

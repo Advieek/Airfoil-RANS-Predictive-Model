@@ -99,6 +99,24 @@ function getField() {
   return document.querySelector('input[name="field"]:checked').value;
 }
 
+/** Built via DOM APIs, not innerHTML template interpolation -- these strings
+ * can originate from server error details or exception messages, and
+ * textContent-based construction means they're never parsed as markup. */
+function renderWarnings(container, messages) {
+  container.innerHTML = "";
+  for (const msg of messages) {
+    const div = document.createElement("div");
+    div.className = "warning-banner";
+    const icon = document.createElement("span");
+    icon.className = "icon";
+    icon.textContent = "!";
+    const text = document.createElement("span");
+    text.textContent = msg;
+    div.append(icon, text);
+    container.appendChild(div);
+  }
+}
+
 async function loadModels() {
   const res = await fetch("/api/models");
   const models = await res.json();
@@ -141,7 +159,7 @@ async function predict() {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
       els.status.textContent = "";
-      els.warnings.innerHTML = `<div class="warning-banner"><span class="icon">!</span><span>${err.detail || "prediction failed"}</span></div>`;
+      renderWarnings(els.warnings, [err.detail || "prediction failed"]);
       return;
     }
     const data = await res.json();
@@ -150,7 +168,7 @@ async function predict() {
   } catch (e) {
     if (mySeq !== requestSeq) return;
     els.status.textContent = "";
-    els.warnings.innerHTML = `<div class="warning-banner"><span class="icon">!</span><span>${e}</span></div>`;
+    renderWarnings(els.warnings, [String(e)]);
   }
 }
 
@@ -159,9 +177,7 @@ function render(data) {
   els.clValue.textContent = data.cl.toFixed(3);
   els.cdValue.textContent = data.cd.toFixed(4);
 
-  els.warnings.innerHTML = data.warnings
-    .map((w) => `<div class="warning-banner"><span class="icon">!</span><span>${w}</span></div>`)
-    .join("");
+  renderWarnings(els.warnings, data.warnings);
 
   const field = getField();
   let values;

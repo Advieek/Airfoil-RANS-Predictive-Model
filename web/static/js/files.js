@@ -20,12 +20,19 @@ function fmtSize(bytes) {
 function renderBreadcrumbs(path) {
   const parts = path ? path.split("/") : [];
   let acc = "";
-  const crumbs = [`<a href="#" data-path="">repo root</a>`];
+  crumbsEl.innerHTML = "";
+  const makeCrumb = (label, dataPath) => {
+    const a = document.createElement("a");
+    a.href = "#";
+    a.dataset.path = dataPath;
+    a.textContent = label;
+    return a;
+  };
+  crumbsEl.appendChild(makeCrumb("repo root", ""));
   for (const p of parts) {
     acc = acc ? acc + "/" + p : p;
-    crumbs.push(`<a href="#" data-path="${acc}">${p}</a>`);
+    crumbsEl.append(" / ", makeCrumb(p, acc));
   }
-  crumbsEl.innerHTML = crumbs.join(" / ");
   crumbsEl.querySelectorAll("a").forEach((a) =>
     a.addEventListener("click", (e) => {
       e.preventDefault();
@@ -50,9 +57,21 @@ async function loadDir(path) {
   }
   treeEl.innerHTML = "";
   for (const entry of data.entries) {
+    // Built via DOM APIs rather than innerHTML template interpolation --
+    // entry.name reflects real filesystem names, and while this browses a
+    // known local repo (not arbitrary user uploads), constructing untrusted
+    // strings into innerHTML is a habit worth not forming even here.
     const row = document.createElement("div");
     row.className = "file-row";
-    row.innerHTML = `<span class="icon">${entry.is_dir ? ICON_DIR : ICON_FILE}</span><span>${entry.name}</span><span class="size">${fmtSize(entry.size)}</span>`;
+    const icon = document.createElement("span");
+    icon.className = "icon";
+    icon.textContent = entry.is_dir ? ICON_DIR : ICON_FILE;
+    const name = document.createElement("span");
+    name.textContent = entry.name;
+    const size = document.createElement("span");
+    size.className = "size";
+    size.textContent = fmtSize(entry.size);
+    row.append(icon, name, size);
     row.addEventListener("click", () => (entry.is_dir ? loadDir(entry.path) : loadFile(entry.path)));
     treeEl.appendChild(row);
   }
