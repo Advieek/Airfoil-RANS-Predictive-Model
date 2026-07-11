@@ -1,5 +1,26 @@
 # PROGRESS
 
+## 2026-07-11 — multi-page website (FastAPI), replacing Streamlit as the primary interface
+
+User asked for a proper multi-page website (Home / How it works / Results / Tool / Files) instead of Streamlit, styled after their personal site (advieek.com) -- couldn't scrape its actual styling since it's a JS SPA (hash routing), so approximated a minimal/professional aesthetic instead, using the dataviz skill's validated default palette (`references/palette.md`) for both the site's color system and the chart/colormap work, rather than picking colors ad hoc.
+
+**Architecture** (planned in `/Users/adv/.claude/plans/frolicking-tickling-hellman.md`, approved before building): FastAPI + Jinja2 templates + vanilla JS, no build step. All prediction math reused as-is from `src/app_core.py`/`src/geometry.py`/`src/evaluate.py` -- the new backend (`web/api.py`) is a thin wrapper, not a rewrite. New files: `web/api.py`, `web/templates/*.html`, `web/static/{css,js}/*`.
+
+- `/api/predict` -- reuses `load_geometry` + `predict_and_integrate` exactly as `app.py` (Streamlit) did, with in-process caching for both loaded models and generated point clouds.
+- `/api/models`, `/api/results` -- serve the four checkpoints' evaluation summaries (from `checkpoints/eval_results_*.json`) plus the hardcoded paper baseline.
+- `/api/files`, `/api/files/download` -- sandboxed repo browser (path resolved + verified inside repo root, `.venv`/`.git`/`data/Dataset`/`__pycache__` excluded). Tested: path traversal (`../../../etc/passwd`) correctly 403s, excluded dirs 404, binary/oversized files correctly flagged preview-blocked with download still available.
+- Tool page field plot is a hand-rolled Canvas2D scatter (fetch JSON, draw client-side) using the dataviz skill's sequential blue ramp, not a server-rendered matplotlib image.
+
+**Real finding while verifying the Tool page, not just UI testing**: cross-checked the API's prediction against the existing `predict.py` CLI (same checkpoint) as a sanity check, then noticed the numbers looked physically implausible for the *default* model choice. Systematically compared all four checkpoints on the same NACA 2412 @ Re=4e6/AoA=5° case: GraphSAGE (the Results-page benchmark winner) gave Cl≈2.05-2.66 for symmetric/near-symmetric cases where thin-airfoil theory predicts Cl≈0.3-0.7 -- clearly wrong. The full-resolution MLP gave Cl=0.338 for NACA0012 @ Re=3e6/AoA=3°, matching 2·π·sin(3°)=0.33 almost exactly.
+
+**Root cause**: this is the same point-density-dependence the 2026-07-11 evaluation-bug investigation (previous entry) already established for GraphSAGE -- its k-NN graph has a characteristic scale tied to training density (64k pts/sim), and the Tool page's synthetic point clouds for arbitrary airfoils (via `generate_geometry_cloud`, ~12-20k points, different density/structure than any AirfRANS mesh) don't match it. The MLP has no graph, so no such dependency, and is far more robust here even though it loses to GraphSAGE on the official benchmark.
+
+**Decision**: decoupled "best benchmark model" (`recommended`, shown on Results page -- GraphSAGE, honestly) from "best tool default" (`tool_default`, used to pre-select the Tool page's dropdown -- MLP). Added an explicit on-page note explaining why they differ, rather than either (a) defaulting to the benchmark winner and quietly shipping implausible predictions, or (b) hiding the discrepancy. Also corrected `src/app_core.py`'s `CHECKPOINT` and `predict.py`'s `--checkpoint` default to the full-resolution MLP (was briefly set to GraphSAGE full-64k earlier in this session, before this finding).
+
+**Verified end-to-end**: all 5 pages return 200 and were screenshotted (headless Chrome) for a visual check -- dark mode renders cleanly, nav/layout/tables/canvas plot all correct. `/api/predict` tested via NACA code and via `.dat` upload (envelope + non-NACA warnings both fire correctly). File browser tested for both correctness (listing, preview, download byte-identical to source) and security (traversal blocked, exclusions enforced).
+
+Updated `README.md` to lead with the website and the corrected/current results table (was still showing stale scarce-task-only numbers from before the scale-up work).
+
 ## 2026-07-11 — found and fixed a real evaluation bug (chunked k-NN); corrected the historical record
 
 The full-scale GraphSAGE eval showed a surprising Cl regression (Spearman 0.826, worse than every other model including its own scarce-task predecessor) alongside a Cd improvement. Investigated rather than accepting it at face value.

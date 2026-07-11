@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}Airfoil RANS Surrogate{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/style.css" />
+    {% block head %}{% endblock %}
+  </head>
+  <body>
+    <nav class="site-nav">
+      <div class="container">
+        <a href="/" class="brand">Airfoil<span class="accent-dot">RANS</span>Surrogate</a>
+        <div class="links">
+          {% for item in nav %}
+          <a href="{{ item.href }}" class="{{ 'active' if item.active else '' }}">{{ item.label }}</a>
+          {% endfor %}
+        </div>
+      </div>
+    </nav>
+    <main>
+      <div class="container">{% block content %}{% endblock %}</div>
+    </main>
+    <footer>
+      <div class="container">
+        Neural surrogate for RANS airfoil flow fields, trained on
+        <a href="https://airfrans.readthedocs.io" target="_blank" rel="noopener">AirfRANS</a>.
+        Per-point MLP and GraphSAGE, PyTorch + FastAPI.
+      </div>
+    </footer>
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

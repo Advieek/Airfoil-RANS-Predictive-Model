@@ -24,7 +24,7 @@ def get_args():
     src.add_argument("--naca", help="4 or 5-digit NACA code, e.g. 2412")
     p.add_argument("--reynolds", type=float, required=True)
     p.add_argument("--aoa", type=float, required=True, help="angle of attack in degrees")
-    p.add_argument("--checkpoint", default="checkpoints/graphsage_scarce_best.pt")
+    p.add_argument("--checkpoint", default="checkpoints/mlp_full_fullres_v4_best.pt")
     p.add_argument("--n-volume", type=int, default=20000)
     p.add_argument("--out-prefix", default=None, help="prefix for output plots; default derived from inputs")
     p.add_argument("--device", default="cpu")

@@ -1,0 +1,19 @@
+{% extends "base.html" %} {% block title %}Files — Airfoil RANS Surrogate{% endblock %} {% block content %}
+<h1>Files</h1>
+<p class="lede">Browse the project repository directly — training code, checkpoints, evaluation results, plots.</p>
+
+<div class="breadcrumbs" id="breadcrumbs"></div>
+
+<div class="files-layout">
+  <div class="card" id="file-tree"></div>
+  <div>
+    <div id="preview-toolbar" style="display: none; margin-bottom: 10px">
+      <a id="download-link" class="btn btn-secondary" href="#" download>Download</a>
+      <span id="preview-meta" style="margin-left: 10px; font-size: 13px; color: var(--ink-muted)"></span>
+    </div>
+    <div id="file-preview"><span class="loading">Select a file to preview it here.</span></div>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<script src="/static/js/files.js"></script>
+{% endblock %}

@@ -5,12 +5,28 @@ attack and predicts the RANS flow field (velocity, pressure, turbulent
 viscosity) everywhere around the airfoil, then integrates the predicted
 surface fields into lift/drag coefficients (Cl/Cd). Trained on
 [AirfRANS](https://arxiv.org/abs/2212.07564) (1,000 real OpenFOAM k-ω SST
-simulations, NeurIPS 2022 benchmark), on Apple Silicon via PyTorch MPS.
+simulations, NeurIPS 2022 benchmark).
 
-Built per `BUILD_SPEC_for_claude_code_v2.md`; see `PROGRESS.md` for the full
-timestamped build log, including two bugs found and fixed along the way
-(a Gate-3 normalization-check false alarm, and a real inward-vs-outward
-surface-normal sign bug caught at Gate 6).
+Built per `BUILD_SPEC_for_claude_code_v2.md` on a 16GB Mac mini, then scaled
+up (full dataset, full mesh resolution, bigger models) on an M4 Pro / 64GB.
+See `PROGRESS.md` for the full timestamped build log, including several real
+bugs found and fixed along the way (a surface-normal sign error, an MPS
+memory leak that cost a day of training before a resumable-checkpoint +
+auto-restart system fixed it for good, and a chunked-evaluation bug that
+silently corrupted GraphSAGE's benchmark numbers).
+
+## Website
+
+```bash
+uv pip install -r requirements.txt
+uvicorn web.api:app --port 8000
+```
+
+Open `http://localhost:8000` for the multi-page site: project overview,
+methodology writeup, full results comparison, a live interactive prediction
+tool, and a browser over the repo itself (code, checkpoints, plots — all
+downloadable). This is the primary way to use the project now; see
+`web/api.py` for the small FastAPI backend behind it.
 
 ## Setup
 
@@ -30,29 +46,35 @@ download command.
 ```
 src/
   dataset.py    # AirfRANS loading, train-only normalization, caching, subsampling
-  models.py     # PerPointMLP, GraphSAGENet
-  train.py      # training loop, TensorBoard logging, evolution snapshots
-  evaluate.py   # chunked full-res inference, Cl/Cd via airfrans Simulation reuse
+  models.py     # PerPointMLP, GraphSAGENet (+ fast GPU/CPU k-NN backends)
+  train.py      # training loop, TensorBoard logging, evolution snapshots,
+                # resumable checkpoints, RSS-limit self-guard
+  evaluate.py   # full-res inference, Cl/Cd via airfrans Simulation reuse
   geometry.py   # arbitrary-airfoil point clouds + panel-method force integration
-  app_core.py   # non-UI prediction logic shared by app.py and its headless test
+  app_core.py   # non-UI prediction logic shared by web/api.py, app.py, predict.py
+scripts/
+  train_supervised.sh          # auto-resuming training supervisor
 predict.py      # CLI: predict Cl/Cd/fields for a NACA code or .dat file
-app.py          # Streamlit live demo
-scripts/        # one-off gate-verification and utility scripts
-plots/          # sanity checks, dashboards, evolution GIF
-checkpoints/    # trained weights + norm stats (gitignored)
+app.py          # Streamlit demo (superseded by web/, kept for quick local checks)
+web/            # FastAPI multi-page site: templates, static assets, API
+plots/          # sanity checks, dashboards, evolution GIFs
+checkpoints/    # trained weights + norm stats + eval results (gitignored)
 runs/           # TensorBoard logs (gitignored)
 ```
 
 ## Usage
 
 ```bash
+# multi-page website (recommended)
+uvicorn web.api:app --port 8000
+
 # CLI prediction on a known NACA shape
 python predict.py --naca 2412 --reynolds 4e6 --aoa 5.0
 
 # or an arbitrary Selig .dat file
 python predict.py --dat foil.dat --reynolds 4e6 --aoa 5.0
 
-# live demo
+# Streamlit demo (older, superseded by the website)
 streamlit run app.py
 
 # watch training live (while src/train.py is running)
@@ -62,34 +84,38 @@ tensorboard --logdir runs --port 6006
 netron checkpoints/model.onnx
 ```
 
-## Results (MLP, `scarce` task, 200 train sims, 400 epochs)
+## Results (full AirfRANS dataset, full mesh resolution, 200-sim held-out test set)
 
-| metric | ours | AirfRANS paper (MLP/scarce) |
-|---|---|---|
-| Cl relative error | 0.83 | 0.385 ± 0.097 |
-| Cl Spearman | 0.950 | 0.981 ± 0.006 |
-| Cd relative error | 17.6 | 3.50 ± 0.998 |
-| Cd Spearman | -0.186 | -0.139 ± 0.185 |
+| model | Cl rel. error | Cl Spearman | Cd rel. error | Cd Spearman |
+|---|---|---|---|---|
+| GraphSAGE (64k pts/sim) | 0.415 | **0.976** | 8.40 | 0.105 |
+| MLP (full resolution) | **0.276** | 0.981 | 15.91 | -0.125 |
+| GraphSAGE (scarce, 16k pts/sim) | 2.815 | 0.804 | 44.07 | 0.251 |
+| MLP (scarce) | 0.830 | 0.950 | 17.62 | -0.186 |
+| AirfRANS paper (MLP/scarce) | 0.385 | 0.981 | 3.50 | -0.139 |
 
-Lift is well-predicted; drag is not — this matches the paper's own baseline
-(a per-point MLP has no way to enforce spatial smoothness, so the near-wall
-velocity gradients drag depends on come out noisy). See `PROGRESS.md` Step 6
-and Step 7 for the full breakdown, and Step 9 for the GraphSAGE follow-up
-(message passing should help specifically because it fixes this).
+Lift is well-predicted across the board; drag remains the hard target (it
+depends on near-wall velocity gradients that are a tiny fraction of total
+field variance, so models optimize past them). GraphSAGE's message passing
+helps close some of that gap over the plain MLP. Full breakdown, including
+the bug that initially corrupted these numbers and how it was found and
+fixed, in `PROGRESS.md` (2026-07-11 entries) and on the website's Results
+page.
+
+**Note**: the interactive tool defaults to the MLP checkpoint, not the
+GraphSAGE model that wins above — GraphSAGE's accuracy is tightly coupled to
+matching its training-time point density, and the tool's synthetic point
+clouds for arbitrary airfoils don't match any AirfRANS mesh density. The MLP
+has no such dependency and is far more robust there. See the Tool page for
+detail, or `web/api.py`'s `MODELS` registry.
 
 ## Known limitations (see PROGRESS.md for detail)
 
-- Cd prediction is unreliable for the MLP baseline (see above) — trust Cl,
-  not Cd, from this checkpoint.
-- `predict.py`/`app.py` on arbitrary airfoils use a simplified panel-method
-  force integration (no mesh available for the exact wall-shear jacobian
-  that Step 6 uses on real AirfRANS test sims), so Cd sign/magnitude on new
-  shapes is noisier still.
-- Trained on `scarce` (200 sims) only, one seed, no hyperparameter tuning —
-  intentionally out of scope for a one-day build (see `BUILD_SPEC`'s "Scope
-  discipline").
-
-## If a GraphSAGE run finished overnight
-
-Run `./morning_after.sh` — it re-evaluates on the test set, regenerates the
-evolution GIF, and switches `app.py`/`predict.py` to the new checkpoint.
+- Cd prediction is unreliable relative to Cl for every checkpoint here —
+  trust Cl more than Cd.
+- `predict.py` / the website's Tool page, on arbitrary airfoils, use a
+  simplified panel-method force integration (no mesh available for the exact
+  wall-shear jacobian that the benchmark evaluation uses on real AirfRANS
+  test sims), so Cd sign/magnitude on new shapes is noisier still.
+- No hyperparameter tuning, single seed per model — intentionally out of
+  scope (see `BUILD_SPEC`'s "Scope discipline").

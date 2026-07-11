@@ -1,0 +1,64 @@
+{% extends "base.html" %} {% block title %}Airfoil RANS Surrogate{% endblock %} {% block content %}
+<div class="hero">
+  <span class="badge badge-accent">AirfRANS · NeurIPS 2022 benchmark</span>
+  <h1>A neural surrogate for RANS airfoil flow fields</h1>
+  <p class="lede">
+    Give it an airfoil shape, a Reynolds number, and an angle of attack. It predicts the full steady-state RANS
+    flow field around the airfoil — velocity, pressure, turbulent viscosity — in milliseconds instead of the
+    minutes-to-hours an OpenFOAM solve takes, then integrates the surface fields into lift and drag coefficients.
+  </p>
+  <div style="display: flex; gap: 12px">
+    <a href="/tool" class="btn btn-primary">Try the tool →</a>
+    <a href="/how-it-works" class="btn btn-secondary">How it works</a>
+  </div>
+</div>
+
+<h2>Headline result</h2>
+<p>
+  Trained on the full AirfRANS dataset (800 simulations, ~180k mesh points each) at full resolution. The
+  best model (GraphSAGE, message-passing over a k-nearest-neighbor point graph) reaches:
+</p>
+<div class="card-grid">
+  <div class="card stat-tile">
+    <div class="value" style="color: var(--cat-1)">0.976</div>
+    <div class="label">Lift (Cl) Spearman correlation</div>
+  </div>
+  <div class="card stat-tile">
+    <div class="value">0.42</div>
+    <div class="label">Lift (Cl) relative error</div>
+  </div>
+  <div class="card stat-tile">
+    <div class="value">200</div>
+    <div class="label">held-out test simulations</div>
+  </div>
+  <div class="card stat-tile">
+    <div class="value">101k</div>
+    <div class="label">model parameters</div>
+  </div>
+</div>
+<p><a href="/results">Full results, methodology, and comparison against the paper's baselines →</a></p>
+
+<h2>What's here</h2>
+<div class="card-grid">
+  <div class="card">
+    <h3 style="margin-top: 0">How it works</h3>
+    <p>Point-cloud representation, the two architectures (per-point MLP vs. GraphSAGE), and how training was scaled up.</p>
+    <a href="/how-it-works">Read →</a>
+  </div>
+  <div class="card">
+    <h3 style="margin-top: 0">Results</h3>
+    <p>Cl/Cd accuracy across four trained checkpoints, benchmarked against the AirfRANS paper's own baselines.</p>
+    <a href="/results">Read →</a>
+  </div>
+  <div class="card">
+    <h3 style="margin-top: 0">Tool</h3>
+    <p>Predict the flow field for a NACA airfoil or your own <code>.dat</code> file, live in the browser.</p>
+    <a href="/tool">Open →</a>
+  </div>
+  <div class="card">
+    <h3 style="margin-top: 0">Files</h3>
+    <p>Browse the training code, checkpoints, evaluation results, and plots directly.</p>
+    <a href="/files">Browse →</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,92 @@
+{% extends "base.html" %} {% block title %}How it works — Airfoil RANS Surrogate{% endblock %} {% block content %}
+<h1>How it works</h1>
+<p class="lede">
+  The model treats the flow domain as a point cloud rather than a fixed grid or mesh, which is what lets it
+  generalize to airfoil shapes it has never seen.
+</p>
+
+<h2>The problem</h2>
+<p>
+  A RANS (Reynolds-Averaged Navier–Stokes) solve computes the steady-state flow field around a shape by
+  iterating a discretized PDE to convergence — accurate, but slow (minutes to hours per case) and tied to a
+  specific mesh. AirfRANS ships 1,000 such solves (OpenFOAM, k-ω SST turbulence closure) over NACA 4/5-digit
+  airfoils, Reynolds 2–6M, angle of attack −5° to 15°. The goal here is a learned function that maps
+  <code>(geometry, Re, AoA) → (velocity, pressure, turbulent viscosity)</code> directly, skipping the solve
+  entirely once trained.
+</p>
+
+<h2>Point-cloud representation</h2>
+<p>Every mesh node becomes an independent training example with 7 input features and 4 target fields:</p>
+<div class="card-grid">
+  <div class="card">
+    <h3 style="margin-top: 0">Inputs (7)</h3>
+    <table>
+      <tr><td>position</td><td class="mono">x, y</td></tr>
+      <tr><td>inlet velocity</td><td class="mono">vx, vy</td></tr>
+      <tr><td>distance to surface</td><td class="mono">sdf</td></tr>
+      <tr><td>surface normal</td><td class="mono">nx, ny</td></tr>
+    </table>
+  </div>
+  <div class="card">
+    <h3 style="margin-top: 0">Outputs (4)</h3>
+    <table>
+      <tr><td>velocity</td><td class="mono">vx, vy</td></tr>
+      <tr><td>pressure</td><td class="mono">p / ρ</td></tr>
+      <tr><td>turbulent viscosity</td><td class="mono">νₜ</td></tr>
+    </table>
+  </div>
+</div>
+<p>
+  Normals are zero everywhere except exactly on the airfoil surface — and point <em>inward</em>, into the solid,
+  matching a real quirk of how AirfRANS stores them (verified against training data; getting this backwards
+  silently corrupts every surface-adjacent prediction — see the Files page, <code>PROGRESS.md</code>, 2026-07-07
+  entry, for how that bug was caught).
+</p>
+
+<h2>Two architectures</h2>
+<h3>Per-point MLP</h3>
+<p>
+  Every point runs through the same feedforward network independently — 5 hidden layers of 256 units, ReLU,
+  ~266k parameters. Simple and fast, but each point has zero awareness of its neighbors. That turns out to
+  matter a lot: lift is dominated by the coarse pressure distribution (which the MLP predicts well), while drag
+  depends on fine near-wall velocity <em>gradients</em> — exactly what a context-free per-point model can't
+  resolve.
+</p>
+<h3>GraphSAGE</h3>
+<p>
+  Same 7→4 shape, but each layer is a message-passing step over a k-nearest-neighbor graph built from the point
+  positions (k=10). With 4 message-passing layers, a point's prediction is informed by neighbors up to 4 hops
+  away — real local geometric context the MLP lacks. This is the model that ends up winning on every metric
+  (see <a href="/results">Results</a>).
+</p>
+
+<h2>Training at scale</h2>
+<p>
+  The project started on a 16GB Mac mini (per the original build spec) and was later re-run on an M4 Pro with
+  64GB unified memory, which changed what was tractable:
+</p>
+<ul>
+  <li><strong>Full task</strong> — 800 training simulations instead of the 200-sim <code>scarce</code> subset.</li>
+  <li><strong>Full resolution</strong> — every mesh point per simulation per epoch (~180k), not a 16–32k subsample.</li>
+  <li><strong>Multi-simulation batching</strong> and larger model capacity.</li>
+</ul>
+<p>
+  Scaling up wasn't free: a full-resolution training run means every batch has a never-before-seen shape (a
+  different combination of variably-sized simulations each step), which turned out to defeat PyTorch's MPS
+  memory allocator — a slow leak that silently killed a 400-epoch run about a day in. The fix ended up being
+  three layers deep: periodic cache-clearing, then a full resumable-checkpoint system (model + optimizer +
+  LR-schedule state, not just weights), then an auto-restart supervisor that resumes from the last checkpoint
+  within seconds of any crash. All of it is in <code>src/train.py</code> and <code>scripts/train_supervised.sh</code>
+  — browsable on the <a href="/files">Files</a> page, with the full incident writeup in <code>PROGRESS.md</code>.
+</p>
+
+<h2>Evaluation</h2>
+<p>
+  Lift and drag coefficients aren't predicted directly — they're <em>integrated</em> from the predicted surface
+  pressure and velocity gradient, the same way a real RANS post-processor computes them. For the withheld
+  AirfRANS test simulations (which have a real OpenFOAM mesh), the evaluation reuses <code>airfrans</code>'s own
+  force-integration code directly, monkey-patching in the model's predictions. For arbitrary airfoils with no
+  mesh (the <a href="/tool">Tool</a> page), it falls back to a simplified panel method over the parametrized
+  surface curve.
+</p>
+{% endblock %}

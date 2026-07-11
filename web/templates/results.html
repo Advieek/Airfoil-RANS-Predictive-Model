@@ -1,0 +1,120 @@
+{% extends "base.html" %} {% block title %}Results — Airfoil RANS Surrogate{% endblock %} {% block content %}
+<h1>Results</h1>
+<p class="lede">
+  Four checkpoints, evaluated on the same withheld 200-simulation AirfRANS test set, benchmarked against the
+  paper's own MLP/scarce baseline.
+</p>
+
+<h2>Cl / Cd accuracy</h2>
+<p id="results-loading" class="loading">Loading evaluation results…</p>
+<table id="results-table" style="display: none">
+  <thead>
+    <tr>
+      <th>Model</th>
+      <th>Cl rel. error</th>
+      <th>Cl Spearman</th>
+      <th>Cd rel. error</th>
+      <th>Cd Spearman</th>
+    </tr>
+  </thead>
+  <tbody id="results-tbody"></tbody>
+</table>
+
+<p style="font-size: 13px; color: var(--ink-muted)">
+  Cl Spearman = rank correlation between predicted and true lift coefficient across the 200 test simulations
+  (1.0 = perfect ranking). Cd is the harder target throughout: it depends on near-wall velocity gradients that
+  a per-point MLP structurally can't resolve, and even GraphSAGE only partially closes the gap. Full numbers,
+  including field-level MSE, in <code>checkpoints/eval_results_*.json</code> on the <a href="/files">Files</a>
+  page.
+</p>
+
+<h2>What the corrected numbers mean</h2>
+<p>
+  The full-scale GraphSAGE result above (Cl Spearman 0.976) is the honest, corrected number — an earlier
+  evaluation run showed a much worse Cl score (0.826) that turned out to be a real bug: the evaluation code
+  split each test simulation's points into fixed-size chunks for inference, and for a graph-based model each
+  chunk got its own independent neighbor graph, silently cutting real spatial neighbors at chunk boundaries.
+  Fixing it (one graph per simulation, matching how the model is actually used) also meant re-checking the
+  <em>scarce</em>-task GraphSAGE numbers, which had the same bug — its real Cl Spearman is 0.804, not the
+  previously-reported 0.966. The full writeup, including why the bug helped one model and hurt the other
+  (it's about a training/evaluation point-density mismatch, not just a bug), is in <code>PROGRESS.md</code>
+  under 2026-07-11.
+</p>
+
+<h2>Predicted vs. true</h2>
+<div class="media-grid">
+  <figure>
+    <img src="/plots/gate5_cl_cd_scatter.png" alt="Predicted vs true Cl and Cd scatter plots" />
+    <figcaption>Predicted vs. true Cl (left) and Cd (right) across the test set. Cl tracks the diagonal; Cd is
+    visibly noisier — the model's known weak point.</figcaption>
+  </figure>
+  <figure>
+    <img src="/plots/gate5_error_contours.png" alt="Error contour plots for best and worst test airfoils" />
+    <figcaption>Pressure-field error for the best- and worst-predicted test airfoils.</figcaption>
+  </figure>
+</div>
+
+<h2>Training evolution</h2>
+<p>Predicted pressure field, same fixed colorbar, one snapshot every 10 epochs — noise sharpening into physics.</p>
+<div class="media-grid">
+  <figure>
+    <img src="/plots/training_evolution.gif" alt="MLP training evolution" />
+    <figcaption>MLP</figcaption>
+  </figure>
+  <figure>
+    <img src="/plots/training_evolution_graphsage.gif" alt="GraphSAGE training evolution" />
+    <figcaption>GraphSAGE</figcaption>
+  </figure>
+</div>
+
+{% endblock %} {% block scripts %}
+<script>
+  const CAT_COLORS = {
+    graphsage_full_64k: "var(--cat-1)",
+    mlp_full_fullres_v4: "var(--cat-2)",
+    graphsage_scarce: "var(--cat-3)",
+    mlp_scarce: "var(--cat-4)",
+  };
+
+  function fmt(x, d = 3) {
+    return typeof x === "number" ? x.toFixed(d) : "—";
+  }
+
+  fetch("/api/results")
+    .then((r) => r.json())
+    .then((data) => {
+      const tbody = document.getElementById("results-tbody");
+      for (const m of data.models) {
+        const met = m.metrics || {};
+        const tr = document.createElement("tr");
+        if (m.recommended) tr.className = "highlight";
+        tr.innerHTML = `
+          <td><span class="swatch" style="background:${CAT_COLORS[m.id] || "var(--ink-muted)"}"></span>${m.label}${
+          m.recommended ? ' <span class="badge badge-accent">best</span>' : ""
+        }</td>
+          <td>${fmt(met.cl_rel_err)}</td>
+          <td>${fmt(met.cl_spearman)}</td>
+          <td>${fmt(met.cd_rel_err, 2)}</td>
+          <td>${fmt(met.cd_spearman)}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+      const p = data.paper_baseline;
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td><em>${p.label}</em></td>
+        <td>${fmt(p.cl_rel_err)}</td>
+        <td>${fmt(p.cl_spearman)}</td>
+        <td>${fmt(p.cd_rel_err, 2)}</td>
+        <td>${fmt(p.cd_spearman)}</td>
+      `;
+      tbody.appendChild(tr);
+
+      document.getElementById("results-loading").style.display = "none";
+      document.getElementById("results-table").style.display = "";
+    })
+    .catch((e) => {
+      document.getElementById("results-loading").textContent = "Failed to load results: " + e;
+    });
+</script>
+{% endblock %}

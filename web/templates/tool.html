@@ -1,0 +1,80 @@
+{% extends "base.html" %} {% block title %}Tool — Airfoil RANS Surrogate{% endblock %} {% block content %}
+<h1>Predict a flow field</h1>
+<p class="lede">Pick an airfoil and flow conditions. Predictions run live in your browser via the trained model.</p>
+<p style="font-size: 13px; color: var(--ink-muted); max-width: 700px">
+  Defaults to the MLP, not the GraphSAGE model that wins on the <a href="/results">Results</a> benchmark —
+  GraphSAGE's accuracy depends on matching the point density it trained on, and this page generates a
+  synthetic point cloud that doesn't match any AirfRANS mesh, which measurably hurts it here. The MLP has no
+  such dependency. You can still select GraphSAGE from the dropdown to see the difference.
+</p>
+
+<div class="tool-layout">
+  <div>
+    <div class="field">
+      <label for="model-select">Model</label>
+      <select id="model-select"></select>
+    </div>
+
+    <div class="field">
+      <label>Airfoil source</label>
+      <div class="radio-row">
+        <label><input type="radio" name="source" value="naca" checked /> NACA code</label>
+        <label><input type="radio" name="source" value="dat" /> Upload .dat</label>
+      </div>
+      <div id="naca-input">
+        <input type="text" id="naca-code" value="2412" maxlength="5" placeholder="e.g. 2412" />
+      </div>
+      <div id="dat-input" style="display: none">
+        <input type="file" id="dat-file" accept=".dat,.txt" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="reynolds"
+        >Reynolds number <span class="range-value" id="reynolds-value">4.0e6</span></label
+      >
+      <input type="range" id="reynolds" min="2000000" max="6000000" step="100000" value="4000000" />
+    </div>
+
+    <div class="field">
+      <label for="aoa">Angle of attack <span class="range-value" id="aoa-value">5.0°</span></label>
+      <input type="range" id="aoa" min="-5" max="15" step="0.5" value="5" />
+    </div>
+
+    <div class="field">
+      <label>Field</label>
+      <div class="radio-row">
+        <label><input type="radio" name="field" value="pressure" checked /> Pressure</label>
+        <label><input type="radio" name="field" value="velocity" /> |Velocity|</label>
+      </div>
+    </div>
+
+    <div id="warnings"></div>
+  </div>
+
+  <div>
+    <div class="readout-row">
+      <div class="card stat-tile" style="flex: 1">
+        <div class="value" id="cl-value">—</div>
+        <div class="label">Predicted Cl</div>
+      </div>
+      <div class="card stat-tile" style="flex: 1">
+        <div class="value" id="cd-value">—</div>
+        <div class="label">Predicted Cd</div>
+      </div>
+    </div>
+
+    <div id="field-canvas-wrap">
+      <canvas id="field-canvas" width="900" height="500"></canvas>
+      <div id="canvas-status" class="loading" style="position: absolute; top: 12px; left: 12px"></div>
+    </div>
+    <div class="colorbar">
+      <span id="colorbar-min">—</span>
+      <div class="colorbar-strip"></div>
+      <span id="colorbar-max">—</span>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<script src="/static/js/tool.js"></script>
+{% endblock %}
