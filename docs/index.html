@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Airfoil RANS Surrogate</title>
+    <link rel="stylesheet" href="assets/css/style.css" />
+  </head>
+  <body>
+    <nav class="site-nav">
+      <div class="container">
+        <a href="index.html" class="brand">Airfoil<span class="thin">RANS</span>Surrogate</a>
+        <div class="links">
+          <a href="index.html" class="active">Home</a>
+          <a href="how-it-works.html">How it works</a>
+          <a href="results.html">Results</a>
+          <a href="tool.html">Tool</a>
+          <a href="files.html">Files</a>
+        </div>
+      </div>
+    </nav>
+    <main>
+      <div class="container">
+        <div class="hero">
+          <span class="eyebrow">AirfRANS — NeurIPS 2022 Benchmark</span>
+          <h1>A neural surrogate for RANS airfoil flow fields</h1>
+          <p class="lede">
+            Give it an airfoil shape, a Reynolds number, and an angle of attack. It predicts the full steady-state
+            RANS flow field around the airfoil — velocity, pressure, turbulent viscosity — in milliseconds instead
+            of the minutes-to-hours an OpenFOAM solve takes, then integrates the surface fields into lift and drag
+            coefficients. This page runs the model entirely in your browser (ONNX Runtime Web) — no server involved.
+          </p>
+          <div style="display: flex; gap: 12px">
+            <a href="tool.html" class="btn btn-primary">Try the tool →</a>
+            <a href="how-it-works.html" class="btn btn-secondary">How it works</a>
+          </div>
+        </div>
+
+        <h2>Headline result</h2>
+        <p>
+          Trained on the full AirfRANS dataset (800 simulations, ~180k mesh points each) at full resolution. The
+          best model on the official benchmark (GraphSAGE, message-passing over a k-nearest-neighbor point graph)
+          reaches:
+        </p>
+        <div class="card-grid">
+          <div class="card stat-tile">
+            <div class="value">0.976</div>
+            <div class="label">Lift (Cl) Spearman correlation</div>
+          </div>
+          <div class="card stat-tile">
+            <div class="value">0.42</div>
+            <div class="label">Lift (Cl) relative error</div>
+          </div>
+          <div class="card stat-tile">
+            <div class="value">200</div>
+            <div class="label">held-out test simulations</div>
+          </div>
+          <div class="card stat-tile">
+            <div class="value">101k</div>
+            <div class="label">model parameters</div>
+          </div>
+        </div>
+        <p><a href="results.html">Full results, methodology, and comparison against the paper's baselines →</a></p>
+
+        <h2>What's here</h2>
+        <div class="card-grid">
+          <div class="card">
+            <h3 style="margin-top: 0">How it works</h3>
+            <p>Point-cloud representation, the two architectures (per-point MLP vs. GraphSAGE), and how training was scaled up.</p>
+            <a href="how-it-works.html">Read →</a>
+          </div>
+          <div class="card">
+            <h3 style="margin-top: 0">Results</h3>
+            <p>Cl/Cd accuracy across four trained checkpoints, benchmarked against the AirfRANS paper's own baselines.</p>
+            <a href="results.html">Read →</a>
+          </div>
+          <div class="card">
+            <h3 style="margin-top: 0">Tool</h3>
+            <p>Predict the flow field for a NACA airfoil or your own <code>.dat</code> file, entirely client-side.</p>
+            <a href="tool.html">Open →</a>
+          </div>
+          <div class="card">
+            <h3 style="margin-top: 0">Files</h3>
+            <p>Browse the training code, checkpoints, evaluation results, and plots on GitHub.</p>
+            <a href="files.html">Browse →</a>
+          </div>
+        </div>
+      </div>
+    </main>
+    <footer>
+      <div class="container">
+        Neural surrogate for RANS airfoil flow fields, trained on
+        <a href="https://airfrans.readthedocs.io" target="_blank" rel="noopener">AirfRANS</a>. Per-point MLP and
+        GraphSAGE, PyTorch + ONNX Runtime Web.
+      </div>
+    </footer>
+  </body>
+</html>

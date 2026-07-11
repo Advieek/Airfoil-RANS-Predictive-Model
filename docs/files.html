@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Files — Airfoil RANS Surrogate</title>
+    <link rel="stylesheet" href="assets/css/style.css" />
+  </head>
+  <body>
+    <nav class="site-nav">
+      <div class="container">
+        <a href="index.html" class="brand">Airfoil<span class="thin">RANS</span>Surrogate</a>
+        <div class="links">
+          <a href="index.html">Home</a>
+          <a href="how-it-works.html">How it works</a>
+          <a href="results.html">Results</a>
+          <a href="tool.html">Tool</a>
+          <a href="files.html" class="active">Files</a>
+        </div>
+      </div>
+    </nav>
+    <main>
+      <div class="container">
+        <h1>Files</h1>
+        <p class="lede">
+          This page is static (no backend to browse the filesystem live), so it links straight to GitHub's own
+          repo browser instead of reimplementing one — GitHub already does this better than a from-scratch version
+          would.
+        </p>
+        <p style="font-size: 13px; color: var(--ink-muted); max-width: 640px">
+          <strong>Set-up note:</strong> update <code>REPO_URL</code> below (and in this file) once this is pushed
+          to its actual GitHub repository — it's a placeholder until then.
+        </p>
+
+        <div class="card-grid" id="repo-links">
+          <div class="card">
+            <h3 style="margin-top: 0">Source code</h3>
+            <p><code>src/</code> — training loop, models, dataset pipeline, evaluation, geometry.</p>
+            <a id="link-src" href="#">Browse →</a>
+          </div>
+          <div class="card">
+            <h3 style="margin-top: 0">Website</h3>
+            <p><code>web/</code> (FastAPI, dynamic) and <code>docs/</code> (this static build).</p>
+            <a id="link-web" href="#">Browse →</a>
+          </div>
+          <div class="card">
+            <h3 style="margin-top: 0">Build log</h3>
+            <p><code>PROGRESS.md</code> — the full timestamped history, including every bug found and fixed.</p>
+            <a id="link-progress" href="#">Read →</a>
+          </div>
+          <div class="card">
+            <h3 style="margin-top: 0">README</h3>
+            <p>Setup, usage, results table, known limitations, next steps.</p>
+            <a id="link-readme" href="#">Read →</a>
+          </div>
+          <div class="card">
+            <h3 style="margin-top: 0">Evaluation results</h3>
+            <p><code>checkpoints/eval_results_*.json</code> — full metrics behind the Results page table.</p>
+            <a id="link-checkpoints" href="#">Browse →</a>
+          </div>
+          <div class="card">
+            <h3 style="margin-top: 0">Plots</h3>
+            <p><code>plots/</code> — evaluation dashboards, training-evolution GIFs, sanity checks.</p>
+            <a id="link-plots" href="#">Browse →</a>
+          </div>
+        </div>
+      </div>
+    </main>
+    <footer>
+      <div class="container">
+        Neural surrogate for RANS airfoil flow fields, trained on
+        <a href="https://airfrans.readthedocs.io" target="_blank" rel="noopener">AirfRANS</a>. Per-point MLP and
+        GraphSAGE, PyTorch + ONNX Runtime Web.
+      </div>
+    </footer>
+    <script>
+      const REPO_URL = 'https://github.com/YOUR_USERNAME/airfoil-surrogate'; // TODO: update once pushed
+      document.getElementById('link-src').href = REPO_URL + '/tree/main/src';
+      document.getElementById('link-web').href = REPO_URL + '/tree/main';
+      document.getElementById('link-progress').href = REPO_URL + '/blob/main/PROGRESS.md';
+      document.getElementById('link-readme').href = REPO_URL + '#readme';
+      document.getElementById('link-checkpoints').href = REPO_URL + '/tree/main/checkpoints';
+      document.getElementById('link-plots').href = REPO_URL + '/tree/main/plots';
+    </script>
+  </body>
+</html>

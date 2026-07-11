@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Results — Airfoil RANS Surrogate</title>
+    <link rel="stylesheet" href="assets/css/style.css" />
+  </head>
+  <body>
+    <nav class="site-nav">
+      <div class="container">
+        <a href="index.html" class="brand">Airfoil<span class="thin">RANS</span>Surrogate</a>
+        <div class="links">
+          <a href="index.html">Home</a>
+          <a href="how-it-works.html">How it works</a>
+          <a href="results.html" class="active">Results</a>
+          <a href="tool.html">Tool</a>
+          <a href="files.html">Files</a>
+        </div>
+      </div>
+    </nav>
+    <main>
+      <div class="container">
+        <h1>Results</h1>
+        <p class="lede">
+          Four checkpoints, evaluated on the same withheld 200-simulation AirfRANS test set, benchmarked against
+          the paper's own MLP/scarce baseline.
+        </p>
+
+        <h2>Cl / Cd accuracy</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Cl rel. error</th>
+              <th>Cl Spearman</th>
+              <th>Cd rel. error</th>
+              <th>Cd Spearman</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="highlight">
+              <td><span class="swatch" style="background: var(--cat-1)"></span><strong>GraphSAGE — full task, 64k pts/sim</strong> <span class="badge badge-accent">best</span></td>
+              <td><strong>0.415</strong></td>
+              <td><strong>0.976</strong></td>
+              <td><strong>8.40</strong></td>
+              <td><strong>0.105</strong></td>
+            </tr>
+            <tr>
+              <td><span class="swatch" style="background: var(--cat-2)"></span>MLP — full task, full resolution</td>
+              <td>0.276</td>
+              <td>0.981</td>
+              <td>15.91</td>
+              <td>-0.125</td>
+            </tr>
+            <tr>
+              <td><span class="swatch" style="background: var(--cat-3)"></span>GraphSAGE — scarce task, 16k pts/sim</td>
+              <td>2.815</td>
+              <td>0.804</td>
+              <td>44.07</td>
+              <td>0.251</td>
+            </tr>
+            <tr>
+              <td><span class="swatch" style="background: var(--cat-4)"></span>MLP — scarce task</td>
+              <td>0.830</td>
+              <td>0.950</td>
+              <td>17.62</td>
+              <td>-0.186</td>
+            </tr>
+            <tr>
+              <td><em>AirfRANS paper (MLP / scarce)</em></td>
+              <td>0.385</td>
+              <td>0.981</td>
+              <td>3.50</td>
+              <td>-0.139</td>
+            </tr>
+          </tbody>
+        </table>
+        <p style="font-size: 13px; color: var(--ink-muted)">
+          Cl Spearman = rank correlation between predicted and true lift coefficient across the 200 test
+          simulations (1.0 = perfect ranking). Cd is the harder target throughout: it depends on near-wall velocity
+          gradients that a per-point MLP structurally can't resolve, and even GraphSAGE only partially closes the
+          gap. Full numbers, including field-level MSE, in <code>checkpoints/eval_results_*.json</code> on
+          <a href="files.html">GitHub</a>.
+        </p>
+
+        <h2>What the corrected numbers mean</h2>
+        <p>
+          The full-scale GraphSAGE result above (Cl Spearman 0.976) is the honest, corrected number — an earlier
+          evaluation run showed a much worse Cl score (0.826) that turned out to be a real bug: the evaluation code
+          split each test simulation's points into fixed-size chunks for inference, and for a graph-based model
+          each chunk got its own independent neighbor graph, silently cutting real spatial neighbors at chunk
+          boundaries. Fixing it (one graph per simulation, matching how the model is actually used) also meant
+          re-checking the <em>scarce</em>-task GraphSAGE numbers, which had the same bug — its real Cl Spearman is
+          0.804, not the previously-reported 0.966. The full writeup, including why the bug helped one model and
+          hurt the other (it's about a training/evaluation point-density mismatch, not just a bug), is in
+          <code>PROGRESS.md</code> under 2026-07-11.
+        </p>
+
+        <h2>Predicted vs. true</h2>
+        <div class="media-grid">
+          <figure>
+            <div class="frame"><img src="assets/plots/gate5_cl_cd_scatter.png" alt="Predicted vs true Cl and Cd scatter plots" /></div>
+            <figcaption>Predicted vs. true Cl (left) and Cd (right) across the test set. Cl tracks the diagonal; Cd is
+            visibly noisier — the model's known weak point.</figcaption>
+          </figure>
+          <figure>
+            <div class="frame"><img src="assets/plots/gate5_error_contours.png" alt="Error contour plots for best and worst test airfoils" /></div>
+            <figcaption>Pressure-field error for the best- and worst-predicted test airfoils.</figcaption>
+          </figure>
+        </div>
+
+        <h2>Training evolution</h2>
+        <p>Predicted pressure field, same fixed colorbar, one snapshot every 10 epochs — noise sharpening into physics.</p>
+        <div class="media-grid">
+          <figure>
+            <div class="frame"><img src="assets/plots/training_evolution.gif" alt="MLP training evolution" /></div>
+            <figcaption>MLP</figcaption>
+          </figure>
+          <figure>
+            <div class="frame"><img src="assets/plots/training_evolution_graphsage.gif" alt="GraphSAGE training evolution" /></div>
+            <figcaption>GraphSAGE</figcaption>
+          </figure>
+        </div>
+      </div>
+    </main>
+    <footer>
+      <div class="container">
+        Neural surrogate for RANS airfoil flow fields, trained on
+        <a href="https://airfrans.readthedocs.io" target="_blank" rel="noopener">AirfRANS</a>. Per-point MLP and
+        GraphSAGE, PyTorch + ONNX Runtime Web.
+      </div>
+    </footer>
+  </body>
+</html>

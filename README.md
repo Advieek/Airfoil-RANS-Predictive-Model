@@ -17,16 +17,40 @@ silently corrupted GraphSAGE's benchmark numbers).
 
 ## Website
 
+There are two versions of the site, same design, different tradeoffs:
+
+**`web/` — FastAPI, full-featured, needs a local server.**
+
 ```bash
 uv pip install -r requirements.txt
 uvicorn web.api:app --port 8000
 ```
 
-Open `http://localhost:8000` for the multi-page site: project overview,
-methodology writeup, full results comparison, a live interactive prediction
-tool, and a browser over the repo itself (code, checkpoints, plots — all
-downloadable). This is the primary way to use the project now; see
-`web/api.py` for the small FastAPI backend behind it.
+Open `http://localhost:8000`. Both trained models are selectable (MLP and
+GraphSAGE), predictions run server-side, and the Files page browses the
+actual live filesystem.
+
+**`docs/` — fully static, zero backend, GitHub Pages-ready.**
+
+```bash
+cd docs && python3 -m http.server 8080
+```
+
+Open `http://localhost:8080`. The Tool page runs the MLP checkpoint entirely
+in-browser via [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/) —
+no server, no network call after the page loads. The entire geometry pipeline
+(NACA generation, point-cloud construction, panel-method force integration)
+is ported to JavaScript in `docs/assets/js/geometry.js` and verified
+bit-for-bit against the Python implementation on synthetic test cases before
+being trusted. Only the MLP runs here (GraphSAGE needs a k-NN graph rebuilt
+around a live point cloud — a bigger port, not done). The Files page links to
+GitHub's own repo browser instead of reimplementing one, since a static page
+can't browse a live filesystem anyway.
+
+**To actually deploy `docs/` on GitHub Pages**: push this repo to GitHub,
+then in Settings → Pages set the source to the `docs/` folder on your default
+branch. Update `REPO_URL` in `docs/files.html` (currently a placeholder)
+to point at the real repo first.
 
 ## Setup
 
@@ -57,6 +81,8 @@ scripts/
 predict.py      # CLI: predict Cl/Cd/fields for a NACA code or .dat file
 app.py          # Streamlit demo (superseded by web/, kept for quick local checks)
 web/            # FastAPI multi-page site: templates, static assets, API
+docs/           # static mirror of web/ for GitHub Pages -- geometry pipeline
+                # re-implemented in JS, model runs client-side via ONNX Runtime Web
 plots/          # sanity checks, dashboards, evolution GIFs
 checkpoints/    # trained weights + norm stats + eval results (gitignored)
 runs/           # TensorBoard logs (gitignored)
