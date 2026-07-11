@@ -12,9 +12,17 @@ straight from the VTU/VTP untouched, giving the ground-truth coefficients from
 the same Simulation instance so node ordering can never mismatch between the
 two calls.
 
-Caveat: for GraphSAGE, chunked inference builds a separate k-NN graph per
-chunk, so cross-chunk neighbor edges are missing at chunk boundaries. Noted,
-not fixed today (full-res eval is dominated by MLP results in Step 6).
+Fixed 2026-07-11: chunking by point count is only safe for the plain MLP
+(purely a memory-management convenience -- predictions are per-point
+independent, chunk boundaries don't affect correctness). For GraphSAGE,
+splitting a simulation's points across chunks means each chunk gets its own
+independent k-NN graph, so points near a chunk boundary lose real neighbors
+-- this measurably corrupted results (a full-resolution eval showed Cl
+Spearman 0.826 with chunk=50_000 vs 0.976 with the whole sim in one graph;
+see PROGRESS.md 2026-07-11). GraphSAGE now always gets one chunk per sim
+(its own k-NN graph over every one of its points, matching how it would
+actually be used for a real single-shot prediction); only the MLP path still
+chunks, to bound peak memory on very large point clouds.
 """
 import numpy as np
 import torch
@@ -29,11 +37,13 @@ def chunked_predict(model, x_raw, stats, device, chunk=50_000):
     x_std = np.asarray(stats["x_std"], dtype=np.float32)
     x_norm = (x_raw - x_mean) / x_std
     model.eval()
+    is_graph_model = hasattr(model, "build_graph")
+    effective_chunk = x_norm.shape[0] if is_graph_model else chunk
     preds = []
     with torch.no_grad():
-        for i in range(0, x_norm.shape[0], chunk):
-            xb = torch.from_numpy(x_norm[i : i + chunk]).to(device)
-            if hasattr(model, "build_graph"):
+        for i in range(0, x_norm.shape[0], effective_chunk):
+            xb = torch.from_numpy(x_norm[i : i + effective_chunk]).to(device)
+            if is_graph_model:
                 edge_index = model.build_graph(xb[:, :2])
                 pb = model(xb, edge_index)
             else:
