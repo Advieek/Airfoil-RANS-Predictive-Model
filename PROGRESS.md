@@ -1,5 +1,20 @@
 # PROGRESS
 
+## 2026-07-11 — GraphSAGE scale-up run COMPLETE; both models now fully trained
+
+`graphsage_full_64k` finished all 400 epochs (supervisor: "reached target epoch 399, done", clean exit code 0), running continuously under supervision for ~42 hours since the 2026-07-09 relaunch with **zero restarts needed** -- the RSS stayed a rock-steady ~7.3GB the entire time (as expected: fixed `--n-points 64000` means fixed batch shapes, so it never triggered the MPS caching-allocator growth that plagued the full-resolution MLP run). **Best val_loss: 0.1740** (`checkpoints/graphsage_full_64k_best.pt`) -- meaningfully better than the full-resolution MLP's 0.2396, consistent with GraphSAGE's message-passing advantage.
+
+Both scale-up models are now trained:
+
+| model | best val_loss |
+|---|---|
+| MLP (full task, full res) | 0.2396 |
+| GraphSAGE (full task, 64k pts) | **0.1740** |
+
+Launched Step 6 test-set evaluation on the finished GraphSAGE checkpoint (`checkpoints/eval_results_graphsage_full_64k.json`, background). Note the same caveat documented in `src/evaluate.py` applies as it did for the original scarce-task GraphSAGE eval: chunked inference builds a separate k-NN graph per 50k-point chunk, so cross-chunk neighbor edges are missing at full-resolution test-sim chunk boundaries -- this is an existing, already-accounted-for limitation, not a new confound, and makes this comparable apples-to-apples with the original scarce+16k GraphSAGE Cl/Cd numbers from Step 6.
+
+Once eval finishes: build the final comparison table (scarce MLP / scarce GraphSAGE / full MLP / full GraphSAGE / paper baselines), regenerate evolution GIFs for both v4 runs, re-export ONNX, point `app.py`/`predict.py` at the best-performing checkpoint (likely GraphSAGE given its lower val_loss, pending the Cl/Cd numbers), and update README.
+
 ## 2026-07-09, evening — MLP scale-up run COMPLETE; GraphSAGE relaunched under supervision; Step 6 eval running
 
 - **`mlp_full_fullres_v4` finished all 400 epochs** (supervisor log: "reached target epoch 399, done", clean exit code 0). One auto-recovery happened along the way (epoch 316, kernel SIGKILL, resumed automatically within 10s, no manual intervention -- see prior entry). **Best val_loss: 0.2396** (`checkpoints/mlp_full_fullres_v4_best.pt`); final-epoch (399) val_loss 0.2706, train_loss 0.081 -- converged and plateaued cleanly over the last ~50 epochs, no overfitting blowup.
