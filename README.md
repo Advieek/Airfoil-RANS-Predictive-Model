@@ -1,5 +1,12 @@
 # Airfoil RANS Surrogate
 
+[![CI](https://github.com/Advieek/Airfoil-RANS-Predictive-Model/actions/workflows/ci.yml/badge.svg)](https://github.com/Advieek/Airfoil-RANS-Predictive-Model/actions/workflows/ci.yml)
+[![Deploy Pages](https://github.com/Advieek/Airfoil-RANS-Predictive-Model/actions/workflows/pages.yml/badge.svg)](https://github.com/Advieek/Airfoil-RANS-Predictive-Model/actions/workflows/pages.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Live demo](https://img.shields.io/badge/demo-GitHub%20Pages-2ea44f)](https://advieek.github.io/Airfoil-RANS-Predictive-Model/)
+
+**[Live demo →](https://advieek.github.io/Airfoil-RANS-Predictive-Model/)** — runs entirely client-side (ONNX Runtime Web), no backend, no data leaves the browser.
+
 A neural network that takes a 2D airfoil geometry + Reynolds number + angle of
 attack and predicts the RANS flow field (velocity, pressure, turbulent
 viscosity) everywhere around the airfoil, then integrates the predicted
@@ -7,6 +14,12 @@ surface fields into lift/drag coefficients (Cl/Cd) — in milliseconds instead
 of the minutes-to-hours a real OpenFOAM solve takes. Trained on
 [AirfRANS](https://arxiv.org/abs/2212.07564) (1,000 real OpenFOAM k-ω SST
 simulations, NeurIPS 2022 benchmark).
+
+<p align="center">
+  <img src="plots/training_evolution_graphsage.gif" width="49%" alt="GraphSAGE prediction converging to ground truth over training">
+  <img src="plots/gate5_cl_cd_scatter.png" width="49%" alt="Predicted vs. true Cl/Cd scatter on the held-out test set">
+</p>
+<p align="center"><sub>Left: predicted pressure field converging to ground truth over training epochs. Right: predicted vs. true Cl/Cd on the 200-sim held-out test set.</sub></p>
 
 Built per `BUILD_SPEC_for_claude_code_v2.md` on a 16GB Mac mini, then scaled
 up (full dataset, full mesh resolution, bigger models) on an M4 Pro / 64GB.
@@ -85,10 +98,12 @@ result to three decimal places. Only the MLP runs client-side (GraphSAGE
 would need k-NN graph construction ported too — not done, disclosed on the
 page rather than silently omitted).
 
-**To deploy `docs/` on GitHub Pages**: push this repo to GitHub, then in
-Settings → Pages set the source to the `docs/` folder on your default branch.
-First update the placeholder `REPO_URL` in `docs/files.html` to point at the
-real repo.
+**Deployed**: [advieek.github.io/Airfoil-RANS-Predictive-Model](https://advieek.github.io/Airfoil-RANS-Predictive-Model/),
+auto-published from `docs/` on every push to `main` by
+`.github/workflows/pages.yml`. To stand up your own fork: push it to GitHub,
+then in Settings → Pages set the source to "GitHub Actions" — the workflow
+handles the rest. Update `REPO_URL` in `docs/files.html` to point at your
+fork (it currently points at the canonical repo).
 
 ## Full setup from scratch
 
@@ -127,6 +142,7 @@ scripts/
   train_supervised.sh          # auto-resuming training supervisor
   export_onnx.py                # re-export a checkpoint to ONNX (single-file, for docs/)
   step*_gate*.py                 # one-off verification scripts from the original build
+tests/          # pytest suite: geometry math, predict pipeline, FastAPI endpoints
 predict.py      # CLI: predict Cl/Cd/fields for a NACA code or .dat file
 app.py          # Streamlit demo (superseded by web/, kept for quick local checks)
 web/            # FastAPI multi-page site: templates, static assets, API
@@ -170,6 +186,23 @@ tensorboard --logdir runs --port 6006
 # view the model architecture graph
 netron checkpoints/model.onnx
 ```
+
+### Testing
+
+```bash
+uv pip install -r requirements-dev.txt
+pytest -v
+```
+
+29 tests covering the geometry/panel-method math (`tests/test_geometry.py`,
+pure NumPy, no checkpoint needed), the end-to-end predict pipeline including a
+symmetric-airfoil-gives-zero-lift physics check (`tests/test_app_core.py`),
+and the FastAPI app including the file-browser's path-traversal guard
+(`tests/test_api.py`, `../../../etc/passwd` must 403/404). Runs in CI
+(`.github/workflows/ci.yml`) on every push/PR to `main`. The older
+`scripts/step*_gate*.py` scripts are the original one-off manual verification
+this suite was adapted from -- kept for history, not part of the automated
+run.
 
 ### Reproducing training
 
@@ -290,10 +323,10 @@ Reviewed before treating this as publishable, not just assumed clean:
 - **PointNet / Graph U-Net**, seed ensembles for uncertainty, `reynolds`/`aoa`
   extrapolation tasks, validation against XFOIL on non-NACA shapes — all
   explicitly deferred in the original build spec, still open.
-- **Automated tests.** Everything so far is ad-hoc verification scripts
-  (`scripts/step*_gate*.py`) run manually; a real `pytest` suite covering the
-  data pipeline, force integration, and API endpoints would catch regressions
-  the way this project's several manual audits caught them by hand.
+- **Broaden test coverage beyond the current 29-test suite** (see Testing,
+  above) — `src/dataset.py`'s normalization/caching and `src/train.py`'s
+  checkpoint-resume logic aren't covered yet, since both need either the
+  10GB AirfRANS dataset or a long-running training loop to exercise properly.
 - **If `web/` ever needs to run beyond localhost**: add authentication,
   rate-limiting, and a size cap on the file-download endpoint; put it behind
   a reverse proxy with TLS; reconsider whether the file browser should be
