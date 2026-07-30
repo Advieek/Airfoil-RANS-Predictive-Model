@@ -1,11 +1,17 @@
+<div align="center">
+
 # Airfoil RANS Surrogate
 
 [![CI](https://github.com/Advieek/Airfoil-RANS-Predictive-Model/actions/workflows/ci.yml/badge.svg)](https://github.com/Advieek/Airfoil-RANS-Predictive-Model/actions/workflows/ci.yml)
 [![Deploy Pages](https://github.com/Advieek/Airfoil-RANS-Predictive-Model/actions/workflows/pages.yml/badge.svg)](https://github.com/Advieek/Airfoil-RANS-Predictive-Model/actions/workflows/pages.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Live demo](https://img.shields.io/badge/demo-GitHub%20Pages-2ea44f)](https://advieek.github.io/Airfoil-RANS-Predictive-Model/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-4f46e5?style=flat-square)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-4f46e5?style=flat-square&logo=python&logoColor=white)](requirements.txt)
+[![PyTorch](https://img.shields.io/badge/PyTorch-4f46e5?style=flat-square&logo=pytorch&logoColor=white)](https://pytorch.org)
+[![Live demo](https://img.shields.io/badge/demo-live-4f46e5?style=flat-square)](https://advieek.github.io/Airfoil-RANS-Predictive-Model/)
 
-**[Live demo →](https://advieek.github.io/Airfoil-RANS-Predictive-Model/)** — runs entirely client-side (ONNX Runtime Web), no backend, no data leaves the browser.
+[**Live demo**](https://advieek.github.io/Airfoil-RANS-Predictive-Model/) · [How it works](https://advieek.github.io/Airfoil-RANS-Predictive-Model/how-it-works.html) · [Results](https://advieek.github.io/Airfoil-RANS-Predictive-Model/results.html) · [Try the tool](https://advieek.github.io/Airfoil-RANS-Predictive-Model/tool.html)
+
+</div>
 
 A neural network that takes a 2D airfoil geometry + Reynolds number + angle of
 attack and predicts the RANS flow field (velocity, pressure, turbulent
@@ -32,6 +38,20 @@ models) on an M4 Pro / 64GB. `PROGRESS.md` is the full timestamped build log
 from those sessions — every step, every bug found and how it was fixed, kept
 as-written rather than cleaned up in hindsight.
 
+## Contents
+
+- [Which model should I use?](#which-model-should-i-use)
+- [Quick start](#quick-start)
+- [Full setup from scratch](#full-setup-from-scratch)
+- [Repository layout](#repository-layout)
+- [Usage](#usage) ([testing](#testing), [reproducing training](#reproducing-training))
+- [How it works](#how-it-works)
+- [Results](#results)
+- [Security notes](#security-notes)
+- [Known limitations](#known-limitations)
+- [Next steps](#next-steps)
+- [Acknowledgments](#acknowledgments)
+
 ## Which model should I use?
 
 Four checkpoints were trained (MLP and GraphSAGE, each on the `scarce` 200-sim
@@ -46,7 +66,7 @@ each gap actually is (min-max normalized composite score across all four
 metrics) makes the winner clear:
 
 | model | composite score | Cl rel. err | Cl Spearman | Cd rel. err | Cd Spearman |
-|---|---|---|---|---|---|
+|---|---:|---:|---:|---:|---:|
 | **GraphSAGE — full task** | **0.896** | 0.415 | 0.976 | **8.40** | **0.105** |
 | MLP — full task | 0.732 | **0.276** | **0.981** | 15.91 | -0.125 |
 | MLP — scarce task | 0.587 | 0.830 | 0.950 | 17.62 | -0.186 |
@@ -251,10 +271,12 @@ so each point has some awareness of its neighbors, which is what makes it
 better at drag (a near-wall-gradient-dependent quantity a context-free
 per-point model structurally can't resolve).
 
-## Results (full AirfRANS dataset, full mesh resolution, 200-sim held-out test set)
+## Results
+
+Full AirfRANS dataset, full mesh resolution, 200-sim held-out test set:
 
 | model | Cl rel. error | Cl Spearman | Cd rel. error | Cd Spearman |
-|---|---|---|---|---|
+|---|---:|---:|---:|---:|
 | GraphSAGE (64k pts/sim) | 0.415 | 0.976 | **8.40** | **0.105** |
 | MLP (full resolution) | **0.276** | **0.981** | 15.91 | -0.125 |
 | GraphSAGE (scarce, 16k pts/sim) | 2.815 | 0.804 | 44.07 | 0.251 |
@@ -303,7 +325,9 @@ Reviewed before treating this as publishable, not just assumed clean:
   on a shared or public-facing server). This is called out again under Next
   steps.
 
-## Known limitations (see PROGRESS.md for detail)
+## Known limitations
+
+See `PROGRESS.md` for the full detail behind each of these:
 
 - Cd prediction is unreliable relative to Cl for every checkpoint here —
   trust Cl more than Cd, and see "Which model should I use?" above for the
