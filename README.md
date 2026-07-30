@@ -21,10 +21,16 @@ simulations, NeurIPS 2022 benchmark).
 </p>
 <p align="center"><sub>Left: predicted pressure field converging to ground truth over training epochs. Right: predicted vs. true Cl/Cd on the 200-sim held-out test set.</sub></p>
 
-Built per `BUILD_SPEC_for_claude_code_v2.md` on a 16GB Mac mini, then scaled
-up (full dataset, full mesh resolution, bigger models) on an M4 Pro / 64GB.
-`PROGRESS.md` is the full timestamped build log — every step, every bug found
-and how it was fixed, kept as-written rather than cleaned up in hindsight.
+Built by [Advieek](https://github.com/Advieek) working with Claude (Anthropic's
+AI coding assistant) as a pairing partner: Advieek drove the research
+direction, architecture and scope decisions (`BUILD_SPEC_for_claude_code_v2.md`),
+and the calls on tradeoffs — which checkpoint to default to, how far to take
+the static-site port, when a fix was worth the effort — while Claude paired on
+implementation, debugging, and the training/evaluation iteration loop. Started
+on a 16GB Mac mini, then scaled up (full dataset, full mesh resolution, bigger
+models) on an M4 Pro / 64GB. `PROGRESS.md` is the full timestamped build log
+from those sessions — every step, every bug found and how it was fixed, kept
+as-written rather than cleaned up in hindsight.
 
 ## Which model should I use?
 

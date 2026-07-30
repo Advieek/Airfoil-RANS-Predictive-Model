@@ -1,5 +1,12 @@
 # PROGRESS
 
+Working log from the pairing sessions between Advieek and Claude, kept
+contemporaneously rather than cleaned up after the fact. Entries are written
+from the session record, so they read as "user asked / found / fixed" — that
+reflects the actual back-and-forth (direction and tradeoff calls from
+Advieek, implementation and debugging worked through together), not a solo
+changelog.
+
 ## 2026-07-11 — publish-readiness pass: security audit, checkpoint gitignore fix, model analysis, README rewrite
 
 User asked to confirm the project is actually GitHub-ready (not a security risk, works if someone downloads the repo and uses all the models) and for a full README rewrite plus a rigorous "which model is best" analysis. Treated "confirm it's fine" as a thing to actually check, not just assert.
