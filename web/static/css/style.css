@@ -106,6 +106,7 @@ body {
   line-height: 1.65;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  overflow-x: hidden;
 }
 
 a {
@@ -115,6 +116,32 @@ a {
 }
 a:hover {
   color: var(--accent-hover);
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--border-strong);
+  border-radius: 999px;
+  border: 2px solid var(--bg);
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ink-muted);
 }
 
 code,
@@ -152,6 +179,9 @@ code {
   height: 68px;
 }
 .site-nav .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   font-weight: 700;
   font-size: 15px;
   letter-spacing: -0.01em;
@@ -163,6 +193,13 @@ code {
 .site-nav .brand .thin {
   font-weight: 400;
   color: var(--ink-secondary);
+}
+.brand-mark {
+  flex-shrink: 0;
+  transition: transform var(--transition);
+}
+.site-nav .brand:hover .brand-mark {
+  transform: translateX(2px) rotate(-4deg);
 }
 .site-nav .links {
   display: flex;
@@ -205,7 +242,27 @@ main {
 }
 
 .hero {
-  padding: 8px 0 56px;
+  position: relative;
+  padding: 8px 0 40px;
+  isolation: isolate;
+}
+.hero::before {
+  content: "";
+  position: absolute;
+  top: -140px;
+  right: -120px;
+  width: 560px;
+  height: 560px;
+  background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
+  opacity: 0.14;
+  filter: blur(50px);
+  z-index: -1;
+  pointer-events: none;
+}
+@media (prefers-color-scheme: dark) {
+  .hero::before {
+    opacity: 0.2;
+  }
 }
 .hero h1 {
   font-size: clamp(36px, 5vw, 52px);
@@ -241,7 +298,7 @@ h2 {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-muted);
-  margin: 64px 0 24px;
+  margin: 56px 0 24px;
 }
 h3 {
   font-size: 19px;
@@ -311,6 +368,13 @@ a.btn:hover {
 .card-grid .card:hover {
   box-shadow: var(--shadow-md);
   border-color: var(--border-strong);
+  transform: translateY(-3px);
+}
+
+.card-icon {
+  display: inline-flex;
+  color: var(--accent);
+  margin-bottom: 12px;
 }
 
 .stat-tile .value {
@@ -358,7 +422,16 @@ th {
 tr:last-child td {
   border-bottom: none;
 }
+tbody tr {
+  transition: background var(--transition);
+}
+tbody tr:hover {
+  background: var(--surface-sunken);
+}
 tr.highlight {
+  background: var(--accent-wash);
+}
+tr.highlight:hover {
   background: var(--accent-wash);
 }
 tr.highlight td {
